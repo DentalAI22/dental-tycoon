@@ -1267,6 +1267,53 @@ export function generateSeasonFeedback(gameState, stats, difficulty) {
       text: 'Healthy cash reserves. You avoided the cash spiral that kills most startups.' });
   }
 
+  // ── REAL-WORLD DENTAL PRACTICE TIPS ──
+  // Always add 2-3 actionable tips based on what happened in their game
+  const tips = [];
+
+  // Revenue per patient benchmark
+  const revPerPatient = gameState.patients > 0 ? Math.round((stats.dailyRevenue * 365) / gameState.patients) : 0;
+  if (revPerPatient < 400) {
+    tips.push('Real-world benchmark: the average dental practice generates $500-$750 per patient of record annually. Your revenue per patient is low — focus on case acceptance and treatment planning.');
+  } else if (revPerPatient > 600) {
+    tips.push('Your revenue per patient is strong. In real practices, this comes from thorough exams, proper diagnosis, and a hygiene department that hands off treatment opportunities to the doctor.');
+  }
+
+  // Hygiene/doctor balance
+  const hasDentist = gameState.staff.some(s => s.role === 'Dentist' || s.role === 'Specialist');
+  const hasHygienist = gameState.staff.some(s => s.role === 'Hygienist');
+  if (hasDentist && !hasHygienist) {
+    tips.push('You have a doctor but no hygienist. In a real practice, the hygiene department is your pipeline — hygienists clean teeth, identify issues, and hand off treatment to the doctor. Without hygiene, you\'re leaving money on the table.');
+  }
+  if (hasHygienist && hasDentist) {
+    tips.push('Good setup: hygienist + doctor is the core revenue engine. In real practices, a solid hygiene recall program generates 30-40% of total revenue and feeds treatment opportunities to the doctor through exams.');
+  }
+
+  // Marketing → Front Desk → Hygiene → Doctor pipeline
+  const hasFrontDesk = gameState.staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
+  const hasMarketing = (gameState.activeMarketing || []).length > 0;
+  if (hasMarketing && !hasFrontDesk) {
+    tips.push('You invested in marketing but have no front desk staff. In reality, marketing dollars are wasted if nobody answers the phone. The patient journey is: Marketing → Phone Call → Front Desk → Hygienist → Doctor. Break any link and patients are lost.');
+  }
+  if (!hasMarketing && gameState.patients < 50) {
+    tips.push('No marketing with a small patient base is a slow death. New practices need aggressive marketing to build patient volume. Word of mouth alone takes 2-3 years to sustain a practice.');
+  }
+
+  // Insurance float reality
+  if (gameState.day <= 60) {
+    tips.push('Early cash crunch is normal. In real dental startups, insurance reimbursements take 30-45 days. You\'re treating patients today but won\'t see the money for a month. Smart owners budget 3-6 months of operating expenses as reserves.');
+  }
+
+  // Debt management
+  if (gameState.debt > 0 && gameState.debt > gameState.cash * 3) {
+    tips.push('Your debt-to-cash ratio is concerning. In real practice acquisitions, banks typically want to see the practice generating enough to cover loan payments within 12-18 months. Prioritize revenue growth over expansion.');
+  }
+
+  // Add top 2-3 tips to feedback
+  tips.slice(0, 3).forEach(tip => {
+    feedback.push({ area: 'Real-World Tip', type: 'tip', text: tip });
+  });
+
   return feedback;
 }
 

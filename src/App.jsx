@@ -32,6 +32,9 @@ function TitleScreen({ onStart, onChallenge }) {
         <div className="tooth-icon">🦷</div>
         <h1 className="title">DENTAL TYCOON</h1>
         <p className="subtitle">Build Your Practice. Grow Your Empire.</p>
+        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '30px', maxWidth: '450px', margin: '0 auto 30px', lineHeight: 1.5 }}>
+          Run a dental practice from the ground up. Every season ends with a comprehensive performance review with real practice management insights and tips.
+        </p>
         <div className="start-options">
           <button className="start-btn" onClick={() => onStart('scratch')}>
             <span className="btn-icon">🏗️</span>
@@ -47,13 +50,24 @@ function TitleScreen({ onStart, onChallenge }) {
               <div className="btn-desc">Buy an existing practice. Inherit staff, patients, and problems.</div>
             </div>
           </button>
-          <button className="start-btn" onClick={() => onChallenge()} style={{ borderColor: '#eab308' }}>
+
+          {/* Challenge Mode — prominently featured */}
+          <button className="start-btn" onClick={() => onChallenge()} style={{ borderColor: '#eab308', background: 'rgba(234,179,8,0.08)', position: 'relative' }}>
             <span className="btn-icon">🏆</span>
             <div>
-              <div className="btn-title">Challenge Mode</div>
-              <div className="btn-desc">Play the same season as a friend & compare</div>
+              <div className="btn-title" style={{ color: '#eab308' }}>Challenge a Friend</div>
+              <div className="btn-desc">Play the SAME season as a friend — same events, same market, different decisions. Compare scores and see who runs the better practice!</div>
             </div>
+            <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#eab308', color: '#0a1628', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>COMPETE</span>
           </button>
+        </div>
+
+        {/* Season feedback promo */}
+        <div style={{ marginTop: '24px', padding: '12px 16px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px', maxWidth: '450px', margin: '24px auto 0' }}>
+          <div style={{ fontSize: '13px', color: '#60a5fa', fontWeight: 'bold', marginBottom: '4px' }}>📊 Every Season = A Learning Experience</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
+            Complete a season and receive detailed feedback on your management decisions — overhead control, staffing, insurance strategy, patient growth, and real-world dental practice tips you can actually use.
+          </div>
         </div>
       </div>
     </div>
@@ -4525,6 +4539,27 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             <div><div className="btn-title">Play Again</div></div>
           </button>
         </div>
+
+        {/* Consultation CTA */}
+        <div style={{ margin: '20px auto', maxWidth: '450px', padding: '16px', background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(59,130,246,0.08))', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#22c55e', marginBottom: '6px' }}>🎓 Want Real Practice Advice?</div>
+          <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, marginBottom: '10px' }}>
+            Think you can run a real dental practice? Book a one-on-one consultation with an experienced dental practice management consultant. Get personalized advice on startup strategy, insurance credentialing, staff hiring, and growth planning.
+          </p>
+          <a href="mailto:consult@dentaltycoon.com?subject=Practice%20Consultation%20Request&body=I%20just%20finished%20a%20season%20of%20Dental%20Tycoon%20and%20would%20like%20to%20discuss%20real%20practice%20management."
+            style={{ display: 'inline-block', padding: '10px 24px', background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '8px', color: '#22c55e', fontWeight: 'bold', fontSize: '13px', textDecoration: 'none', cursor: 'pointer' }}>
+            Book a Consultation →
+          </a>
+          <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>Limited spots available</div>
+        </div>
+
+        {/* Challenge mode promo if not already in challenge */}
+        {!challengeData?.code && (
+          <div style={{ margin: '10px auto', maxWidth: '450px', padding: '12px', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '13px', color: '#eab308', fontWeight: 'bold' }}>🏆 Think you're good? Prove it.</div>
+            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0' }}>Challenge a friend to play the exact same season. Same events, same market — different decisions. Who runs the better practice?</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -4598,6 +4633,18 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             </button>
           )}
           <button className="start-btn" onClick={() => window.location.reload()}>Try Again</button>
+        </div>
+
+        {/* Consultation CTA */}
+        <div style={{ margin: '20px auto', maxWidth: '400px', padding: '14px', background: 'linear-gradient(135deg, rgba(239,68,68,0.06), rgba(59,130,246,0.08))', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '6px' }}>📞 Learn From the Pros</div>
+          <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, marginBottom: '10px' }}>
+            Practice management is hard — even in a game. Book a consultation with a dental practice management expert and learn what it really takes to succeed.
+          </p>
+          <a href="mailto:consult@dentaltycoon.com?subject=Practice%20Consultation%20Request&body=I%20played%20Dental%20Tycoon%20and%20want%20to%20learn%20more%20about%20real%20practice%20management."
+            style={{ display: 'inline-block', padding: '8px 20px', background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '8px', color: '#60a5fa', fontWeight: 'bold', fontSize: '12px', textDecoration: 'none', cursor: 'pointer' }}>
+            Book a Consultation →
+          </a>
         </div>
       </div>
     );
