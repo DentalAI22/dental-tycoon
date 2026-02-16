@@ -207,7 +207,9 @@ function LeaderboardScreen({ onBack }) {
 // ═══════════════════════════════════════════════════════
 // DIFFICULTY SELECTION SCREEN
 // ═══════════════════════════════════════════════════════
-function DifficultySelectionScreen({ onSelect, onBack }) {
+function DifficultySelectionScreen({ onSelect, onBack, startMode }) {
+  const isAcquire = startMode === 'acquire';
+
   const systemToggles = [
     { key: 'staffDramaEnabled', label: 'Staff Drama', desc: 'Conflicts, quitting, burnout' },
     { key: 'equipBreakdownEnabled', label: 'Equipment Breakdowns', desc: 'Chairs break, need repair' },
@@ -219,47 +221,57 @@ function DifficultySelectionScreen({ onSelect, onBack }) {
 
   return (
     <div className="acquire-screen">
-      <h2 className="acquire-title">Choose Your Difficulty</h2>
-      <p className="acquire-sub">Same loan, same market. Difficulty controls how many systems you have to manage — beginners get training wheels, experts get chaos.</p>
+      <h2 className="acquire-title">{isAcquire ? 'Choose Your Acquisition' : 'Choose Your Difficulty'}</h2>
+      <p className="acquire-sub">{isAcquire
+        ? 'Bigger practice = bigger revenue potential, but also bigger loan, bigger overhead, and more that can go wrong. Small and simple is easier to manage. Big and complex is where the real money — and real risk — lives.'
+        : 'Same loan, same market. Difficulty controls how many systems you have to manage — beginners get training wheels, experts get chaos.'
+      }</p>
       <div className="practice-list">
-        {DIFFICULTY_MODES.map(mode => (
-          <div key={mode.id} className="practice-card" onClick={() => onSelect(mode)}>
-            <h3 className="practice-name">{mode.icon} {mode.name}</h3>
-            <p className="practice-desc" style={{ fontStyle: 'italic', color: '#94a3b8' }}>{mode.subtitle}</p>
-            <p className="practice-desc">{mode.description}</p>
-            <div className="practice-stats">
-              <div className="pstat"><span className="pstat-label">Loan</span><span className="pstat-val">${(mode.loanAmount / 1000).toFixed(0)}K @ {Math.round(mode.interestRate * 100)}%</span></div>
-              <div className="pstat"><span className="pstat-label">Season</span><span className="pstat-val">{mode.gameDuration} days</span></div>
-              <div className="pstat"><span className="pstat-label">Overdraft</span><span className="pstat-val red">-${Math.abs(mode.overdraftLimit / 1000).toFixed(0)}K</span></div>
-              <div className="pstat"><span className="pstat-label">Patient Growth</span><span className="pstat-val">{mode.patientGrowthBonus > 1 ? 'Easier' : mode.patientGrowthBonus < 1 ? 'Harder' : 'Normal'}</span></div>
-            </div>
-            {/* System Toggles — what's ON and OFF */}
-            <div style={{ marginTop: '10px' }}>
-              <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Systems Active</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                {systemToggles.map(toggle => {
-                  const isOn = mode[toggle.key];
-                  return (
-                    <span key={toggle.key} title={toggle.desc} style={{
-                      fontSize: '10px', padding: '2px 8px', borderRadius: '10px',
-                      background: isOn ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                      color: isOn ? '#ef4444' : '#22c55e',
-                    }}>{isOn ? toggle.label : `No ${toggle.label}`}</span>
-                  );
-                })}
+        {DIFFICULTY_MODES.map(mode => {
+          const modeName = isAcquire ? (mode.acquireName || mode.name) : mode.name;
+          const modeSubtitle = isAcquire ? (mode.acquireSubtitle || mode.subtitle) : mode.subtitle;
+          const modeDesc = isAcquire ? (mode.acquireDescription || mode.description) : mode.description;
+          const modeFeatures = isAcquire ? (mode.acquireFeatures || mode.features) : mode.features;
+
+          return (
+            <div key={mode.id} className="practice-card" onClick={() => onSelect(mode)}>
+              <h3 className="practice-name">{mode.icon} {modeName}</h3>
+              <p className="practice-desc" style={{ fontStyle: 'italic', color: '#94a3b8' }}>{modeSubtitle}</p>
+              <p className="practice-desc">{modeDesc}</p>
+              <div className="practice-stats">
+                <div className="pstat"><span className="pstat-label">{isAcquire ? 'Purchase Price' : 'Loan'}</span><span className="pstat-val">${(mode.loanAmount / 1000).toFixed(0)}K @ {Math.round(mode.interestRate * 100)}%</span></div>
+                <div className="pstat"><span className="pstat-label">Season</span><span className="pstat-val">{mode.gameDuration} days</span></div>
+                <div className="pstat"><span className="pstat-label">Overdraft</span><span className="pstat-val red">-${Math.abs(mode.overdraftLimit / 1000).toFixed(0)}K</span></div>
+                <div className="pstat"><span className="pstat-label">Patient Growth</span><span className="pstat-val">{mode.patientGrowthBonus > 1 ? 'Easier' : mode.patientGrowthBonus < 1 ? 'Harder' : 'Normal'}</span></div>
+              </div>
+              {/* System Toggles — what's ON and OFF */}
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>Systems Active</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {systemToggles.map(toggle => {
+                    const isOn = mode[toggle.key];
+                    return (
+                      <span key={toggle.key} title={toggle.desc} style={{
+                        fontSize: '10px', padding: '2px 8px', borderRadius: '10px',
+                        background: isOn ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                        color: isOn ? '#ef4444' : '#22c55e',
+                      }}>{isOn ? toggle.label : `No ${toggle.label}`}</span>
+                    );
+                  })}
+                </div>
+              </div>
+              <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {modeFeatures.map((feat, i) => (
+                  <span key={i} style={{
+                    fontSize: '10px', padding: '3px 8px', borderRadius: '10px',
+                    background: mode.id === 'expert' ? 'rgba(239,68,68,0.15)' : mode.id === 'beginner' ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)',
+                    color: mode.id === 'expert' ? '#ef4444' : mode.id === 'beginner' ? '#22c55e' : '#eab308',
+                  }}>{feat}</span>
+                ))}
               </div>
             </div>
-            <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {mode.features.map((feat, i) => (
-                <span key={i} style={{
-                  fontSize: '10px', padding: '3px 8px', borderRadius: '10px',
-                  background: mode.id === 'expert' ? 'rgba(239,68,68,0.15)' : mode.id === 'beginner' ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.15)',
-                  color: mode.id === 'expert' ? '#ef4444' : mode.id === 'beginner' ? '#22c55e' : '#eab308',
-                }}>{feat}</span>
-              ))}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <button className="back-btn" onClick={onBack}>Back</button>
     </div>
@@ -5095,7 +5107,7 @@ export default function App() {
   if (screen === 'leaderboard') return <LeaderboardScreen onBack={() => setScreen('title')} />;
   if (screen === 'challengeSetup') return <ChallengeSetupScreen onStartChallenge={handleStartChallenge} onJoinChallenge={handleJoinChallenge} onBack={() => setScreen('title')} />;
   if (screen === 'challengeCompare') return <ChallengeCompareScreen challengeCode={challengeData?.code} myResult={challengeResult} onBack={() => { setChallengeData(null); setChallengeResult(null); setScreen('title'); }} />;
-  if (screen === 'difficulty') return <DifficultySelectionScreen onSelect={handleDifficultySelect} onBack={() => setScreen('title')} />;
+  if (screen === 'difficulty') return <DifficultySelectionScreen onSelect={handleDifficultySelect} onBack={() => setScreen('title')} startMode={startMode} />;
   if (screen === 'spaceSelection') return <SpaceSelectionScreen onSelect={handleSpaceSelect} onBack={() => setScreen('difficulty')} />;
   if (screen === 'buildout') return <BuildoutScreen space={selectedSpace} difficulty={difficulty} onComplete={handleBuildoutComplete} onBack={() => setScreen('spaceSelection')} />;
   if (screen === 'setup') return <SetupPhaseScreen buildoutData={buildoutData} difficulty={difficulty} onComplete={handleSetupComplete} onBack={() => setScreen('buildout')} />;

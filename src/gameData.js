@@ -14,6 +14,11 @@ export const DIFFICULTY_MODES = [
     id: 'beginner', name: 'Solo Startup', icon: '🟢',
     subtitle: 'Small Practice, Big Dreams',
     description: 'A small solo practice startup. $500K loan, 1-2 operatories. Staff drama and equipment breakdowns turned OFF so you can focus on the fundamentals: get patients, treat them well, control costs.',
+    // Acquisition flavor
+    acquireName: 'Small Practice',
+    acquireSubtitle: 'Simple, Manageable, Low Risk',
+    acquireDescription: 'Buy a small solo practice — 1-2 operatories, a handful of patients, one hygienist. Low overhead, fewer moving parts, and less that can go wrong. Income starts modest but the margins are forgiving. Perfect for learning how to run a practice without getting crushed by overhead.',
+    acquireFeatures: ['90-day season', '$500K acquisition', 'Existing patients', 'Small staff', 'Fewer surprises', 'Learn the ropes'],
     loanAmount: 500000,
     gameDuration: 90,         // 90-day season
     rentMultiplier: 1.0,
@@ -37,6 +42,11 @@ export const DIFFICULTY_MODES = [
     id: 'intermediate', name: 'Growing Practice', icon: '🟡',
     subtitle: 'Real Dentistry, Real Problems',
     description: 'A mid-size practice with real challenges. $750K loan, 3-4 operatories. Staff have morale issues, equipment breaks, insurance companies audit you. You need to hire right, train well, and balance growth with overhead.',
+    // Acquisition flavor
+    acquireName: 'Mid-Size Practice',
+    acquireSubtitle: 'Established But Needs Work',
+    acquireDescription: 'Acquire a mid-size practice — 3-4 operatories, existing patient base, staff already in place. The previous owner left some problems behind: aging equipment, staff morale issues, insurance contracts that need renegotiating. Revenue is there but so is the overhead. You need to stabilize and grow without bleeding cash.',
+    acquireFeatures: ['180-day season', '$750K acquisition', 'Inherited staff & patients', 'Equipment issues', 'Insurance audits', 'Real management'],
     loanAmount: 750000,
     gameDuration: 180,        // 6-month season
     rentMultiplier: 1.0,
@@ -60,6 +70,11 @@ export const DIFFICULTY_MODES = [
     id: 'expert', name: 'Multi-Doctor Empire', icon: '🔴',
     subtitle: 'Big Practice, Big Risk',
     description: 'A large multi-doctor practice. $1.2M loan — massive overhead. You need to produce $2-3M/year just to stay afloat. Associates, specialists, big staff. Competitors poach your people, patients expect premium service, one bad month and the cash spiral starts.',
+    // Acquisition flavor
+    acquireName: 'Large Group Practice',
+    acquireSubtitle: 'Big Investment, Big Overhead, Big Upside',
+    acquireDescription: 'Buy a large multi-doctor group practice — $1.2M deal. Multiple associates, specialists, big staff roster, high-volume patient flow. Revenue potential is massive but so are the bills. Payroll alone could sink you. Competitors are circling to poach your best people. One bad quarter and the cash spiral starts. The reward? If you get it right, you\'re running a dental empire.',
+    acquireFeatures: ['365-day season', '$1.2M acquisition', 'Multiple doctors', 'Big staff & overhead', 'Competitors', 'Empire potential'],
     loanAmount: 1200000,
     gameDuration: 365,        // full year
     rentMultiplier: 1.0,
@@ -85,6 +100,11 @@ export const DIFFICULTY_MODES = [
     id: 'hell', name: 'Hell Mode', icon: '💀',
     subtitle: 'Everything Goes Wrong',
     description: 'SPECIAL EVENT. $1.5M loan, 365 days, aggressive competitors, staff constantly threatening to leave, equipment breaks weekly, insurance clawbacks, malpractice suits, embezzlement. The highest scores in the game come from surviving this. Can you?',
+    // Acquisition flavor
+    acquireName: 'Hell Mode Acquisition',
+    acquireSubtitle: 'You Bought a Disaster',
+    acquireDescription: 'You just bought a $1.5M practice that the previous owner ran into the ground. Bad reviews, staff ready to quit, equipment falling apart, insurance carriers threatening to drop you, and competitors circling. The highest scores come from turning this around. Can you?',
+    acquireFeatures: ['365 days', '$1.5M disaster', '2x events', 'Inherited problems', 'Score x1.5 multiplier', 'Only for the fearless'],
     loanAmount: 1500000,
     gameDuration: 365,
     rentMultiplier: 1.2,
