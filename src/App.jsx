@@ -21,6 +21,7 @@ import {
   generateAcquisitionOptions, PROBLEM_POOL,
   getStaffingRecommendation, FEE_SCHEDULE_EXAMPLES,
   SPECIALIST_ROLES, isProvider,
+  setGlobalRng, resetGlobalRng, createDayRng, getGlobalRng,
 } from './gameData'
 
 // ═══════════════════════════════════════════════════════
@@ -4179,6 +4180,13 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       const bankrupt = prev.cash < diff.overdraftLimit;
       if (seasonDone || bankrupt) return prev;
 
+      // Seed RNG for challenge mode — ensures identical randomness for same code + day
+      if (challengeData?.code) {
+        const baseSeed = codeToSeed(challengeData.code);
+        setGlobalRng(createDayRng(baseSeed, prev.day));
+      }
+      const rng = getGlobalRng();
+
       const s = calculateDailyStats(prev);
       const newLog = [...prev.log];
       let cashDelta = s.dailyProfit;
@@ -4315,7 +4323,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           const adjustedChance = event.chance * diff.eventFrequency;
           const conflictReduction = hasRecentTeamBuilding && (event.id === 'staff_conflict' || event.id === 'staff_quits') ? 0.5 : 1;
           const turnoverReduction = hasRecentLeadership && event.firesStaff ? 0.7 : 1;
-          if (Math.random() > adjustedChance * conflictReduction * turnoverReduction) continue;
+          if (rng() > adjustedChance * conflictReduction * turnoverReduction) continue;
           eventsToFire.push(event);
           break; // max 1 random event per day in normal mode
         }
@@ -4354,7 +4362,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             : prev.staff;
           if (candidates.length === 0) continue;
           // In challenge mode, pick staff deterministically (first match) instead of random
-          targetStaff = schedule ? candidates[0] : candidates[Math.floor(Math.random() * candidates.length)];
+          targetStaff = schedule ? candidates[0] : candidates[Math.floor(rng() * candidates.length)];
           msg = msg.replace('{staff}', targetStaff.name);
         }
 
@@ -4369,7 +4377,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         }
         if (hasRecentLeadership && event.firesStaff) {
           // Leadership training gives 50% chance to retain the staff member
-          if (Math.random() < 0.5 || (schedule && prev.day % 2 === 0)) {
+          if (rng() < 0.5 || (schedule && prev.day % 2 === 0)) {
             msg += ' (Your leadership training convinced them to stay!)';
             event = { ...event, firesStaff: false };
           }
@@ -4413,12 +4421,12 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
 
       // Low cleanliness triggers
       const newCleanliness = Math.max(0, Math.min(100, (prev.cleanliness || 50) + cleanlinessChange));
-      if (newCleanliness < 25 && Math.random() < 0.05) {
+      if (newCleanliness < 25 && rng() < 0.05) {
         newLog.push({ day: prev.day, text: 'Patients are complaining about the office cleanliness!', type: 'negative' });
         repDelta -= 0.1;
         patientDelta -= 2;
       }
-      if (newCleanliness < 15 && Math.random() < 0.03) {
+      if (newCleanliness < 15 && rng() < 0.03) {
         newLog.push({ day: prev.day, text: 'Health violation warning! Your office is below cleanliness standards.', type: 'negative' });
         cashDelta -= 1500;
         repDelta -= 0.2;
@@ -4434,16 +4442,16 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         moraleChangeFromBuildout -= 0.3;
         if (prev.day % 5 === 0) newLog.push({ day: prev.day, text: 'CRITICAL: Staff are hearing rumors about financial trouble. Morale dropping.', type: 'negative' });
         // Suppliers start charging more
-        if (Math.random() < 0.1) {
+        if (rng() < 0.1) {
           cashDelta -= 2000;
           newLog.push({ day: prev.day, text: 'Suppliers demanding cash-on-delivery. Extra $2,000 in rush charges.', type: 'negative' });
         }
       }
-      if (diff.cashSpiralEnabled && prev.cash < -50000 && Math.random() < 0.05) {
+      if (diff.cashSpiralEnabled && prev.cash < -50000 && rng() < 0.05) {
         // Staff may walk out
         const availableStaff = prev.staff.filter(s => s.morale < 40);
         if (availableStaff.length > 0) {
-          const leaver = availableStaff[Math.floor(Math.random() * availableStaff.length)];
+          const leaver = availableStaff[Math.floor(rng() * availableStaff.length)];
           newLog.push({ day: prev.day, text: `${leaver.name} quit! "I haven't been paid in weeks. I'm done."`, type: 'negative' });
           prev = { ...prev, staff: prev.staff.filter(s => s.id !== leaver.id), totalStaffQuit: (prev.totalStaffQuit || 0) + 1 };
         }
@@ -4453,7 +4461,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       // In challenge mode, breakdowns come from the schedule. In normal mode, random roll.
       const breakdownToday = schedule
         ? (schedule[prev.day] || []).some(e => e.type === 'equipment_breakdown')
-        : Math.random() < 0.02 * diff.eventFrequency;
+        : rng() < 0.02 * diff.eventFrequency;
       if (diff.equipBreakdownEnabled && breakdownToday) {
         const equipTechRel = prev.relationships?.equipment_tech || 50;
         const supplyRepRel = prev.relationships?.supply_rep || 50;
@@ -4461,17 +4469,17 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         // All breakable equipment — chairs, compressors, pumps, diagnostics, everything
         const breakableEquip = prev.equipment.filter(eq => {
           const def = EQUIPMENT.find(e => e.id === eq);
-          return def && def.breakdownChance && Math.random() < def.breakdownChance * 2;
+          return def && def.breakdownChance && rng() < def.breakdownChance * 2;
         });
 
         if (breakableEquip.length > 0) {
-          const brokenId = schedule ? breakableEquip[0] : breakableEquip[Math.floor(Math.random() * breakableEquip.length)];
+          const brokenId = schedule ? breakableEquip[0] : breakableEquip[Math.floor(rng() * breakableEquip.length)];
           const def = EQUIPMENT.find(e => e.id === brokenId);
           const repairCost = Math.round(def.cost * 0.15);
           const isCritical = def.criticalEquipment; // compressor or vacuum pump
 
           // Equipment rep relationship determines outcome
-          if (equipTechRel > 75 && Math.random() < 0.4) {
+          if (equipTechRel > 75 && rng() < 0.4) {
             // Great relationship = sometimes free fix with fun narrative
             const freeFixStories = [
               `${def.name} started acting up, but luckily your equipment rep owed you one from that golf game last week — ran out and fixed it for FREE!`,
@@ -4486,7 +4494,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             const actualCost = Math.round(repairCost * 0.6);
             newLog.push({ day: prev.day, text: `${def.name} needs repair! Cost: $${actualCost.toLocaleString()} (good tech relationship = 40% off).${isCritical ? ' PRACTICE STOPPED until fixed.' : ''}`, type: 'negative' });
             cashDelta -= actualCost;
-            patientDelta -= isCritical ? (Math.floor(Math.random() * 3) + 3) : (Math.floor(Math.random() * 2) + 1);
+            patientDelta -= isCritical ? (Math.floor(rng() * 3) + 3) : (Math.floor(rng() * 2) + 1);
           } else {
             // Bad/no relationship = full price, slow response, more patient loss
             const penaltyMult = equipTechRel < 30 ? 1.3 : 1.0; // bad relationship = price gouging
@@ -4499,7 +4507,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             ];
             newLog.push({ day: prev.day, text: badRepStories[prev.day % badRepStories.length], type: 'negative' });
             cashDelta -= actualCost;
-            patientDelta -= isCritical ? (Math.floor(Math.random() * 4) + 4) : (Math.floor(Math.random() * 3) + 1);
+            patientDelta -= isCritical ? (Math.floor(rng() * 4) + 4) : (Math.floor(rng() * 3) + 1);
           }
         }
       }
@@ -4534,16 +4542,16 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       const growthBonus = diff.patientGrowthBonus;
       const hasActiveMarketing = (prev.activeMarketing || []).length > 0;
       if (prev.patients < 10) {
-        if (hasActiveMarketing && s.actualPatients > 0 && Math.random() < 0.15 * growthBonus) patientDelta += 1;
+        if (hasActiveMarketing && s.actualPatients > 0 && rng() < 0.15 * growthBonus) patientDelta += 1;
       } else if (prev.patients < 50) {
-        if (prev.reputation > 3.5 && Math.random() < 0.3 * growthBonus) patientDelta += 1;
-        if (hasActiveMarketing && Math.random() < 0.3 * growthBonus) patientDelta += 1;
+        if (prev.reputation > 3.5 && rng() < 0.3 * growthBonus) patientDelta += 1;
+        if (hasActiveMarketing && rng() < 0.3 * growthBonus) patientDelta += 1;
       } else if (prev.patients < 150) {
-        if (prev.reputation > 3.5) patientDelta += Math.floor(Math.random() * 2 * growthBonus);
-        if (hasActiveMarketing) patientDelta += Math.floor(Math.random() * 2 * growthBonus);
+        if (prev.reputation > 3.5) patientDelta += Math.floor(rng() * 2 * growthBonus);
+        if (hasActiveMarketing) patientDelta += Math.floor(rng() * 2 * growthBonus);
       } else {
-        if (prev.reputation > 3.5) patientDelta += Math.floor(Math.random() * 3 * growthBonus);
-        else if (prev.reputation < 2.5) patientDelta -= Math.floor(Math.random() * 3);
+        if (prev.reputation > 3.5) patientDelta += Math.floor(rng() * 3 * growthBonus);
+        else if (prev.reputation < 2.5) patientDelta -= Math.floor(rng() * 3);
       }
 
       // ── ASSOCIATE DAILY PROCESSING (before morale update so changes persist) ──
@@ -4568,7 +4576,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           if (a.flightRisk === 'critical' && prev.day % 7 === 0) {
             newLog.push({ day: prev.day, text: `ALERT: Dr. ${a.name} was seen visiting a real estate office. They may be planning to leave!`, type: 'negative' });
           }
-          if (a.flightRisk === 'critical' && Math.random() < 0.02) {
+          if (a.flightRisk === 'critical' && rng() < 0.02) {
             const dep = associateDeparture(prev.patients, a);
             newLog.push({ day: prev.day, text: dep.message, type: 'negative' });
             patientDelta += -dep.patientsLost;
@@ -4674,7 +4682,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           const hasLocMarketing = (loc.activeMarketing || []).length > 0;
           if (hasLocMarketing && loc.patients < 200) {
             const growthChance = 0.08 * diff.patientGrowthBonus;
-            if (Math.random() < growthChance) loc.patients = (loc.patients || 0) + 1;
+            if (rng() < growthChance) loc.patients = (loc.patients || 0) + 1;
           }
           // Reputation drift
           if (locStats.actualPatients > 0) {
@@ -4690,7 +4698,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
 
         // Multi-location events
         for (const evt of MULTI_LOCATION_EVENTS) {
-          if (Math.random() > (evt.chance || 0.02)) continue;
+          if (rng() > (evt.chance || 0.02)) continue;
           if (evt.condition && !evt.condition(prev)) continue;
           newLog.push({ day: prev.day, text: evt.message, type: evt.type });
           if (evt.cashEffect) cashDelta += evt.cashEffect;
@@ -4777,6 +4785,9 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         worstCash: Math.min(prev.worstCash ?? prev.cash, prev.cash + cashDelta),
       };
     });
+
+    // Reset RNG after game tick (so non-challenge code uses Math.random normally)
+    resetGlobalRng();
 
     // Generate animated patients
     setGameState(prev => {

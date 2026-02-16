@@ -1096,6 +1096,13 @@ function mulberry32(seed) {
   };
 }
 
+// ─── GLOBAL RNG (swappable between Math.random and seeded for challenge mode) ───
+let _globalRng = Math.random;
+export function setGlobalRng(fn) { _globalRng = fn; }
+export function getGlobalRng() { return _globalRng; }
+export function resetGlobalRng() { _globalRng = Math.random; }
+export function createDayRng(baseSeed, day) { return mulberry32(baseSeed * 31337 + day); }
+
 // Generate a short shareable challenge code
 export function generateChallengeCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no I/O/0/1 to avoid confusion
@@ -1651,27 +1658,27 @@ const LAST_NAMES = ['Johnson','Smith','Williams','Brown','Davis','Miller','Wilso
 
 export function generateStaffMember(template, options = {}) {
   // Pick a random personality
-  const personality = STAFF_PERSONALITIES[Math.floor(Math.random() * STAFF_PERSONALITIES.length)];
-  const quirk = STAFF_QUIRKS[Math.floor(Math.random() * STAFF_QUIRKS.length)];
+  const personality = STAFF_PERSONALITIES[Math.floor(_globalRng() * STAFF_PERSONALITIES.length)];
+  const quirk = STAFF_QUIRKS[Math.floor(_globalRng() * STAFF_QUIRKS.length)];
 
   // Base stats + personality modifiers (clamped)
   const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
-  const baseSkill = Math.floor(Math.random() * (template.skillRange[1] - template.skillRange[0])) + template.skillRange[0];
-  const baseAttitude = Math.floor(Math.random() * 60) + 40;
-  const baseReliability = Math.floor(Math.random() * 50) + 50;
+  const baseSkill = Math.floor(_globalRng() * (template.skillRange[1] - template.skillRange[0])) + template.skillRange[0];
+  const baseAttitude = Math.floor(_globalRng() * 60) + 40;
+  const baseReliability = Math.floor(_globalRng() * 50) + 50;
 
   const skill = clamp(baseSkill + personality.skillMod, 10, 98);
   const attitude = clamp(baseAttitude + personality.attitudeMod, 15, 95);
   const reliability = clamp(baseReliability + personality.reliabilityMod, 20, 95);
 
   // Salary: base variance + personality mod (proportional to value)
-  const salaryVariance = (Math.random() * 0.2 - 0.1);
+  const salaryVariance = (_globalRng() * 0.2 - 0.1);
   const salary = Math.round(template.baseSalary * (1 + salaryVariance + personality.salaryMod));
 
-  const firstName = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
-  const lastName = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  const firstName = FIRST_NAMES[Math.floor(_globalRng() * FIRST_NAMES.length)];
+  const lastName = LAST_NAMES[Math.floor(_globalRng() * LAST_NAMES.length)];
   const member = {
-    id: Date.now() + Math.random(),
+    id: Date.now() + _globalRng(),
     name: `${firstName} ${lastName}`,
     role: template.role, icon: template.icon,
     skill, attitude, reliability, salary,
@@ -1683,7 +1690,7 @@ export function generateStaffMember(template, options = {}) {
     quirk,
     canSeePatients: template.canSeePatients || false,
     patientsPerDay: template.patientsPerDay || 0,
-    morale: 60 + Math.floor(Math.random() * 30),
+    morale: 60 + Math.floor(_globalRng() * 30),
     daysEmployed: 0,
     assignedLocationId: options.locationId || null,
   };
@@ -2039,10 +2046,10 @@ const ACQUISITION_SCALING = {
   hell:         { priceRange: [700000, 1200000], patientRange: [300, 800], staffRange: [5, 10], problemRange: [3, 4], sqftRange: [3000, 5000], repRange: [1.5, 3.5], revenuePerPatient: 160 },
 };
 
-function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
-function randFloat(min, max, decimals = 1) { return parseFloat((Math.random() * (max - min) + min).toFixed(decimals)); }
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-function shuffle(arr) { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function randInt(min, max) { return Math.floor(_globalRng() * (max - min + 1)) + min; }
+function randFloat(min, max, decimals = 1) { return parseFloat((_globalRng() * (max - min) + min).toFixed(decimals)); }
+function pick(arr) { return arr[Math.floor(_globalRng() * arr.length)]; }
+function shuffle(arr) { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(_globalRng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 function generatePracticeName() {
   return `${pick(LAST_NAMES)} ${pick(PRACTICE_TYPES)}`;
@@ -2079,11 +2086,11 @@ function generatePracticeStaff(count, problems) {
 function generatePracticeEquipment(sqft, problems, ops) {
   const outdated = problems.includes('equipment_outdated');
   const equip = [];
-  for (let i = 0; i < ops; i++) equip.push(outdated || Math.random() < 0.4 ? 'basic_chair' : 'premium_chair');
+  for (let i = 0; i < ops; i++) equip.push(outdated || _globalRng() < 0.4 ? 'basic_chair' : 'premium_chair');
   if (!outdated) {
     equip.push('xray');
     if (sqft >= 2000) equip.push('panoramic_xray');
-    if (Math.random() > 0.5) equip.push('intraoral_camera');
+    if (_globalRng() > 0.5) equip.push('intraoral_camera');
   }
   equip.push('sterilizer');
   // Every practice must have a compressor and vacuum pump
@@ -2095,11 +2102,11 @@ function generatePracticeInsurances(problems, isOlderPractice) {
   const mess = problems.includes('insurance_mess');
   if (mess) return ['delta', 'cigna', 'aetna', 'united_hmo', 'dhmo'];
   const base = ['delta'];
-  if (Math.random() > 0.4) base.push('cigna');
-  if (Math.random() > 0.6) base.push('metlife');
+  if (_globalRng() > 0.4) base.push('cigna');
+  if (_globalRng() > 0.6) base.push('metlife');
   // Older/established practices may have grandfathered Delta Premier
   // This is a RED FLAG for buyers — the fee schedule drops ~25% under new ownership
-  if (isOlderPractice && Math.random() > 0.4) {
+  if (isOlderPractice && _globalRng() > 0.4) {
     base.push('premier');
   }
   return base;
@@ -2216,7 +2223,7 @@ export { PROBLEM_POOL };
 // ─── PATIENT NAMES ───
 const PATIENT_FIRST = ['Alex','Jordan','Taylor','Morgan','Casey','Riley','Quinn','Sam','Pat','Jamie','Drew','Avery','Blake','Cameron','Dakota'];
 export function generatePatientName() {
-  return PATIENT_FIRST[Math.floor(Math.random() * PATIENT_FIRST.length)] + ' ' + LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  return PATIENT_FIRST[Math.floor(_globalRng() * PATIENT_FIRST.length)] + ' ' + LAST_NAMES[Math.floor(_globalRng() * LAST_NAMES.length)];
 }
 
 export function pickProcedure(equipment, staff) {
@@ -2226,7 +2233,7 @@ export function pickProcedure(equipment, staff) {
     return true;
   });
   const totalFreq = available.reduce((sum, p) => sum + p.frequency, 0);
-  let roll = Math.random() * totalFreq;
+  let roll = _globalRng() * totalFreq;
   for (const proc of available) { roll -= proc.frequency; if (roll <= 0) return proc; }
   return available[0] || PROCEDURES[0];
 }
@@ -2350,13 +2357,13 @@ export function calculateDailyStats(gameState) {
   let organicWalkIns = 0;
   if (patients === 0 && !hasAnyMarketing && !hasSignage) {
     // Completely new, no marketing = maybe 1 walk-in every few days if lucky
-    organicWalkIns = Math.random() < 0.1 ? 1 : 0;
+    organicWalkIns = _globalRng() < 0.1 ? 1 : 0;
   } else if (patients < 20 && !hasAnyMarketing) {
     // Very few patients, no marketing = very slow
-    organicWalkIns = Math.random() < 0.2 ? 1 : 0;
+    organicWalkIns = _globalRng() < 0.2 ? 1 : 0;
   } else if (patients < 50) {
     // Small base, still building
-    organicWalkIns = Math.random() < 0.4 ? 1 : 0;
+    organicWalkIns = _globalRng() < 0.4 ? 1 : 0;
   }
 
   // INSURANCE CANNIBALIZATION MODEL
