@@ -4902,30 +4902,48 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
     const isBankrupt = isGameOver;
     let feedback = [];
     try { feedback = generateSeasonFeedback(gameState, stats, diff); } catch (e) { console.error('[DT] feedback error:', e); }
+
+    // SAFETY: If calculateScore returned null, create a default score object so the UI doesn't crash
+    const safeScore = score || {
+      overall: 0,
+      overallGrade: 'N/A',
+      overallColor: '#64748b',
+      categories: {
+        staffingHR: { score: 0, grade: 'N/A', color: '#64748b', label: 'Staffing & HR', detail: 'No data' },
+        doctorMgmt: { score: 0, grade: 'N/A', color: '#64748b', label: 'Doctor Management', detail: 'No data' },
+        training: { score: 0, grade: 'N/A', color: '#64748b', label: 'Training', detail: 'No data' },
+        marketingGrowth: { score: 0, grade: 'N/A', color: '#64748b', label: 'Marketing & Growth', detail: 'No data' },
+        financial: { score: 0, grade: 'N/A', color: '#64748b', label: 'Financial', detail: 'No data' },
+        patientCare: { score: 0, grade: 'N/A', color: '#64748b', label: 'Patient Care', detail: 'No data' },
+      },
+      metrics: { monthlyRevenue: 0, monthlyCosts: 0, monthlyProfit: 0, profitMargin: 0, overheadRatio: 0 },
+    };
+    console.log('[DT] Score:', score ? 'calculated' : 'USING FALLBACK', safeScore.overall);
+
     const modeBoard = score ? getLeaderboardByMode(diff.name) : [];
     const rank = score ? modeBoard.findIndex(e => e.overallScore <= score.overall) : -1;
     const isNewHigh = score && (modeBoard.length === 0 || score.overall > (modeBoard[0]?.overallScore || 0));
 
     // Compute practice archetype based on play style
     const archetype = (() => {
-      if (!score) return { name: 'Practice Owner', icon: '🦷', desc: 'You gave it a shot.' };
-      const cats = score.categories;
+      const cats = safeScore.categories;
       const fin = cats.financial?.score || 0;
       const mkt = cats.marketingGrowth?.score || 0;
       const staff = cats.staffingHR?.score || 0;
       const care = cats.patientCare?.score || 0;
       const train = cats.training?.score || 0;
       const doc = cats.doctorMgmt?.score || 0;
-      if (score.overall >= 850) return { name: 'Elite Practice', icon: '👑', desc: 'Top-tier management across every category. You\'d crush it in the real world.' };
-      if (score.overall >= 700 && fin >= 75) return { name: 'Profit Machine', icon: '💎', desc: 'Strong margins, lean operations. The banks love you.' };
+      if (safeScore.overall >= 850) return { name: 'Elite Practice', icon: '👑', desc: 'Top-tier management across every category. You\'d crush it in the real world.' };
+      if (safeScore.overall >= 700 && fin >= 75) return { name: 'Profit Machine', icon: '💎', desc: 'Strong margins, lean operations. The banks love you.' };
       if (mkt >= 80 && care >= 70) return { name: 'Growth Engine', icon: '🚀', desc: 'Aggressive marketing paired with solid patient care. Classic expansion model.' };
       if (staff >= 80 && train >= 70) return { name: 'People-First Practice', icon: '🤝', desc: 'You invested in your team. Low turnover, high morale — the Costco of dentistry.' };
       if (care >= 85) return { name: 'Patient Champion', icon: '⭐', desc: '5-star care, loyal patients. Revenue follows reputation.' };
       if (doc >= 80 && staff >= 60) return { name: 'Clinical Powerhouse', icon: '🔬', desc: 'Elite providers, strong clinical outcomes. Specialists drive premium revenue.' };
       if (fin >= 70 && mkt < 40) return { name: 'Silent Earner', icon: '🤫', desc: 'Profitable but invisible. More marketing could have doubled your growth.' };
       if (mkt >= 70 && fin < 40) return { name: 'Money Pit', icon: '🕳️', desc: 'Patients everywhere, profit nowhere. You marketed before you had the systems to handle it.' };
-      if (score.overall >= 500) return { name: 'Solid Practice', icon: '🏥', desc: 'Middle of the pack. Some categories strong, others need work.' };
+      if (safeScore.overall >= 500) return { name: 'Solid Practice', icon: '🏥', desc: 'Middle of the pack. Some categories strong, others need work.' };
       if (isBankrupt) return { name: 'Cautionary Tale', icon: '📉', desc: 'Every bankrupt practice teaches a lesson. The question is whether you learn it.' };
+      if (!score) return { name: 'Practice Owner', icon: '🦷', desc: 'You gave it a shot.' };
       return { name: 'Work in Progress', icon: '🔧', desc: 'Lots of room to grow. Focus on your weakest categories next run.' };
     })();
 
@@ -4999,12 +5017,11 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         </div>
 
         {/* ── BIG SCORE ── */}
-        {score && (
-          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-            <div style={{ fontSize: '4rem', fontFamily: 'Fredoka One', color: score.overallColor, lineHeight: 1, textShadow: `0 0 40px ${score.overallColor}33` }}>
-              {score.overall}
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ fontSize: '4rem', fontFamily: 'Fredoka One', color: safeScore.overallColor, lineHeight: 1, textShadow: `0 0 40px ${safeScore.overallColor}33` }}>
+              {safeScore.overall}
             </div>
-            <div style={{ fontSize: '1rem', color: score.overallColor, fontWeight: 600, marginTop: '2px' }}>/ 1000 — {score.overallGrade}</div>
+            <div style={{ fontSize: '1rem', color: safeScore.overallColor, fontWeight: 600, marginTop: '2px' }}>/ 1000 — {safeScore.overallGrade}</div>
             {isNewHigh && (
               <div style={{ marginTop: '8px', fontSize: '14px', fontFamily: 'Fredoka One', color: '#eab308', animation: 'pulse 1.5s ease-in-out infinite' }}>
                 New High Score for {diff.name}!
@@ -5014,14 +5031,12 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
               Rank #{rank === -1 ? modeBoard.length + 1 : rank + 1} on {diff.name} leaderboard
             </p>
           </div>
-        )}
 
         {/* ── CATEGORY BREAKDOWN ── */}
-        {score && (
           <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
             <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>Performance Breakdown</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              {Object.entries(score.categories).map(([key, cat]) => (
+              {Object.entries(safeScore.categories).map(([key, cat]) => (
                 <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', borderLeft: `3px solid ${cat.color}` }}>
                   <span style={{ fontSize: '18px', width: '24px', textAlign: 'center' }}>{cat.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -5042,7 +5057,6 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
               ))}
             </div>
           </div>
-        )}
 
         {/* ── FINANCIAL DASHBOARD ── */}
         <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
@@ -5052,18 +5066,14 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
               <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Final Cash</div>
               <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: gameState.cash > 0 ? '#22c55e' : '#ef4444', marginTop: '2px' }}>${gameState.cash.toLocaleString()}</div>
             </div>
-            {score && (
-              <>
-                <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+            <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Profit</div>
-                  <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: score.metrics.monthlyProfit >= 0 ? '#22c55e' : '#ef4444', marginTop: '2px' }}>${Math.round(score.metrics.monthlyProfit).toLocaleString()}</div>
+                  <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: safeScore.metrics.monthlyProfit >= 0 ? '#22c55e' : '#ef4444', marginTop: '2px' }}>${Math.round(safeScore.metrics.monthlyProfit).toLocaleString()}</div>
                 </div>
                 <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
                   <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Overhead</div>
-                  <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: score.metrics.overheadRatio < 65 ? '#22c55e' : score.metrics.overheadRatio < 75 ? '#eab308' : '#ef4444', marginTop: '2px' }}>{score.metrics.overheadRatio}%</div>
+                  <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: safeScore.metrics.overheadRatio < 65 ? '#22c55e' : safeScore.metrics.overheadRatio < 75 ? '#eab308' : '#ef4444', marginTop: '2px' }}>{safeScore.metrics.overheadRatio}%</div>
                 </div>
-              </>
-            )}
             <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
               <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reputation</div>
               <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: gameState.reputation >= 4 ? '#22c55e' : gameState.reputation >= 3 ? '#eab308' : '#ef4444', marginTop: '2px' }}>{gameState.reputation.toFixed(1)} ⭐</div>
@@ -5148,7 +5158,6 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         )}
 
         {/* ── PROFIT & LOSS STATEMENT ── */}
-        {score && (
           <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
             <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>Profit & Loss Statement</h3>
             <div style={{ background: 'rgba(30,41,59,0.5)', borderRadius: '10px', padding: '14px', border: '1px solid rgba(148,163,184,0.1)' }}>
@@ -5161,7 +5170,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                   <span style={{ color: '#94a3b8' }}>Monthly Run Rate</span>
-                  <span style={{ color: '#22c55e' }}>${Math.round(score.metrics.monthlyRevenue).toLocaleString()}/mo</span>
+                  <span style={{ color: '#22c55e' }}>${Math.round(safeScore.metrics.monthlyRevenue).toLocaleString()}/mo</span>
                 </div>
               </div>
               <div style={{ height: '1px', background: 'rgba(148,163,184,0.15)', margin: '6px 0' }} />
@@ -5192,7 +5201,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
                 )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
                   <span style={{ color: '#94a3b8' }}>Overhead Ratio</span>
-                  <span style={{ color: score.metrics.overheadRatio < 65 ? '#22c55e' : score.metrics.overheadRatio < 75 ? '#eab308' : '#ef4444' }}>{score.metrics.overheadRatio}%</span>
+                  <span style={{ color: safeScore.metrics.overheadRatio < 65 ? '#22c55e' : safeScore.metrics.overheadRatio < 75 ? '#eab308' : '#ef4444' }}>{safeScore.metrics.overheadRatio}%</span>
                 </div>
               </div>
               <div style={{ height: '2px', background: 'rgba(148,163,184,0.2)', margin: '6px 0' }} />
@@ -5218,7 +5227,6 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
               )}
             </div>
           </div>
-        )}
 
         {/* ── RANK & SAVE CONFIRMATION ── */}
         <p style={{ color: '#475569', fontSize: '11px', textAlign: 'center', margin: '8px 0 16px' }}>Score saved to leaderboard</p>
@@ -5228,8 +5236,8 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           {/* Challenge a Friend — share button with clipboard copy */}
           <button className="start-btn" onClick={() => {
             const shareCode = challengeData?.code || generateChallengeCode();
-            const shareScore = score ? score.overall : 0;
-            const shareGrade = score ? score.overallGrade : 'N/A';
+            const shareScore = safeScore.overall;
+            const shareGrade = safeScore.overallGrade;
             const shareText = `I scored ${shareScore.toLocaleString()}/1000 (${shareGrade}) on Dental Tycoon! Can you beat me? Challenge code: ${shareCode} — play at dentaltycoon.com`;
             if (navigator.share) {
               navigator.share({ title: 'Dental Tycoon Challenge', text: shareText }).catch(() => {});
@@ -5247,11 +5255,11 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             <div><div className="btn-title" style={{ color: '#eab308' }}>Challenge a Friend</div><div className="btn-desc">Share your score</div></div>
           </button>
 
-          {challengeData?.code && onChallengeComplete && score && (
+          {challengeData?.code && onChallengeComplete && (
             <button className="start-btn" onClick={() => {
               onChallengeComplete({
-                overallScore: score.overall, overallGrade: score.overallGrade,
-                profitMargin: score.metrics.profitMargin, overheadRatio: score.metrics.overheadRatio,
+                overallScore: safeScore.overall, overallGrade: safeScore.overallGrade,
+                profitMargin: safeScore.metrics.profitMargin, overheadRatio: safeScore.metrics.overheadRatio,
                 finalCash: gameState.cash, finalPatients: gameState.patients,
                 finalReputation: gameState.reputation, staffCount: gameState.staff.length,
                 insuranceCount: (gameState.acceptedInsurance || []).length,
@@ -5282,7 +5290,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             Help make Dental Tycoon better. We read every message.
           </p>
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-            <a href={`mailto:feedback@dentaltycoon.com?subject=${encodeURIComponent(`Dental Tycoon Feedback [${score ? score.overallGrade : 'N/A'}]`)}&body=${encodeURIComponent(`Score: ${score ? score.overall : 'N/A'}/1000\nDifficulty: ${diff.name}\nOutcome: ${isBankrupt ? 'Bankrupt' : isDsoSold ? 'DSO Sale' : 'Completed'}\n\n--- My feedback ---\n\n`)}`}
+            <a href={`mailto:feedback@dentaltycoon.com?subject=${encodeURIComponent(`Dental Tycoon Feedback [${safeScore.overallGrade}]`)}&body=${encodeURIComponent(`Score: ${safeScore.overall}/1000\nDifficulty: ${diff.name}\nOutcome: ${isBankrupt ? 'Bankrupt' : isDsoSold ? 'DSO Sale' : 'Completed'}\n\n--- My feedback ---\n\n`)}`}
               style={{ display: 'inline-block', padding: '8px 20px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '8px', color: '#22c55e', fontWeight: 'bold', fontSize: '12px', textDecoration: 'none' }}>
               Send Feedback
             </a>
