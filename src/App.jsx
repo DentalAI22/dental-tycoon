@@ -12,6 +12,7 @@ import {
   saveChallenge, getChallengeResults, generateSeasonFeedback, compareChallengeResults,
   HELL_EVENTS, KEY_DECISIONS,
   MONTHLY_LOAN_PAYMENT_RATE, LATE_PAYMENT_PENALTY_RATE, LOAN_WARNING_DAYS,
+  INSURANCE_REIMBURSEMENT_DELAY, CREDENTIALING_DAYS,
   generateStaffMember, calculateDailyStats, generatePatientName, pickProcedure,
   calculatePressures,
   LOCATION_OPTIONS, getLocationAdvice, getSynergyMultipliers, getRegionalManagerPenalty,
@@ -656,6 +657,7 @@ function CoachBanner({ tip }) {
 
 function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
   const initialBudget = difficulty?.loanAmount || 750000;
+  const baseBuildoutCost = space.baseBuildoutCost || Math.round(space.sqft * 125); // lease deposit, permits, plumbing, electrical, HVAC, IT infrastructure
   const [builtRooms, setBuiltRooms] = useState([]);
   const [cashSpent, setCashSpent] = useState(0);
 
@@ -664,7 +666,7 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
     return sum + (item ? item.sqftNeeded : 0);
   }, 0);
   const remainingSqft = space.sqft - usedSqft;
-  const remainingBudget = initialBudget - cashSpent;
+  const remainingBudget = initialBudget - baseBuildoutCost - cashSpent;
 
   const opsCount = builtRooms.filter(r => r === 'basic_ops' || r === 'premium_ops').length;
 
@@ -704,6 +706,7 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
     onComplete({
       builtOutRooms: builtRooms,
       cashRemaining: remainingBudget,
+      baseBuildoutCost: baseBuildoutCost,
       space: space,
     });
   };
@@ -716,6 +719,20 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
     <div className="acquire-screen">
       <h2 className="acquire-title">Build Out Your Space</h2>
       <p className="acquire-sub">{space.name} - {space.sqft.toLocaleString()} sqft | Rent: ${space.rent.toLocaleString()}/mo</p>
+      <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '10px 16px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '8px', fontSize: '12px', color: '#94a3b8' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>Loan Amount:</span><span style={{ color: '#e2e8f0', fontWeight: 'bold' }}>${initialBudget.toLocaleString()}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>Base Buildout (lease, permits, plumbing, HVAC, IT):</span><span style={{ color: '#ef4444', fontWeight: 'bold' }}>-${baseBuildoutCost.toLocaleString()}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>Room & Operatory Buildout:</span><span style={{ color: '#ef4444', fontWeight: 'bold' }}>-${cashSpent.toLocaleString()}</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid rgba(148,163,184,0.2)', paddingTop: '4px' }}>
+          <span style={{ fontWeight: 'bold' }}>Remaining for Equipment, Staff & Reserves:</span><span style={{ color: remainingBudget < 50000 ? '#ef4444' : '#22c55e', fontWeight: 'bold' }}>${remainingBudget.toLocaleString()}</span>
+        </div>
+      </div>
 
       <CoachBanner tip={coachTip} />
 
@@ -1833,10 +1850,17 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
           log: [...prev.log, { day: prev.day, text: `Cannot credential with ${plan.name} — requires ${plan.minReputation}+ star reputation (you have ${prev.reputation.toFixed(1)})`, type: 'negative' }],
         };
       }
+      const newCredentialDays = { ...(prev.insuranceCredentialDays || {}) };
+      if (!isAccepted) {
+        newCredentialDays[id] = prev.day; // track when this plan was added for credentialing delay
+      } else {
+        delete newCredentialDays[id];
+      }
       return {
         ...prev,
         acceptedInsurance: isAccepted ? accepted.filter(i => i !== id) : [...accepted, id],
-        log: [...prev.log, { day: prev.day, text: isAccepted ? `Dropped ${plan.name}` : `Now accepting ${plan.name}`, type: 'info' }],
+        insuranceCredentialDays: newCredentialDays,
+        log: [...prev.log, { day: prev.day, text: isAccepted ? `Dropped ${plan.name}` : `Now accepting ${plan.name} — credentialing takes ~${CREDENTIALING_DAYS} days before full reimbursements`, type: isAccepted ? 'info' : 'warning' }],
       };
     });
   };
@@ -3320,6 +3344,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         scoreMultiplier: diff.scoreMultiplier || 1,
         lastLoanPaymentDay: 0,
         missedPayments: 0,
+        insuranceCredentialDays: {},
         decisionHistory: [],
         triggeredDecisions: [],
         locations: [],
@@ -3359,6 +3384,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         scoreMultiplier: diff.scoreMultiplier || 1,
         lastLoanPaymentDay: 0,
         missedPayments: 0,
+        insuranceCredentialDays: {},
         decisionHistory: [],
         triggeredDecisions: [],
         locations: [],

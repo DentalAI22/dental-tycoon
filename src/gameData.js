@@ -1384,33 +1384,39 @@ export function getLeaderboardModes() {
 // ─── BUILDOUT / SPACE ───
 export const BUILDOUT_COST_PER_SQFT = 225; // $200-250 range
 export const REVENUE_PER_SQFT_TARGET = 150; // annual revenue per sqft benchmark
+export const INSURANCE_REIMBURSEMENT_DELAY = 30; // days before insurance payments start coming in
+export const CREDENTIALING_DAYS = 14; // days to credential with a new insurance carrier
 
 export const SPACE_OPTIONS = [
   { id: 'tiny', name: 'Small Suite', sqft: 1000, rent: 2500, maxOps: 2,
+    baseBuildoutCost: 125000, // lease deposit, permits, plumbing, electrical, HVAC, IT
     description: 'A modest 1,000 sqft suite in a strip mall. Low overhead, but very limited space. You\'ll cap out quickly if things go well.',
     pros: 'Low rent, low risk', cons: 'No room to expand, max 2 operatories' },
   { id: 'small', name: 'Standard Office', sqft: 1800, rent: 4500, maxOps: 4,
+    baseBuildoutCost: 200000,
     description: '1,800 sqft in a medical building. Enough for a solid solo practice with room for 1-2 associates.',
     pros: 'Balanced cost, room for 4 ops', cons: 'May outgrow it in 2-3 years' },
   { id: 'medium', name: 'Professional Space', sqft: 3000, rent: 7500, maxOps: 6,
+    baseBuildoutCost: 325000,
     description: '3,000 sqft standalone space. Built for growth. But $7,500/mo rent bleeds cash fast with no patients.',
     pros: '6 ops, room for full team', cons: '$90K/yr rent burns cash fast at startup' },
   { id: 'large', name: 'Large Practice', sqft: 5000, rent: 12000, maxOps: 10,
+    baseBuildoutCost: 550000,
     description: '5,000 sqft prime location. A gamble — massive potential but $12K/mo rent with zero patients could bankrupt you in months.',
     pros: '10 ops, massive revenue ceiling', cons: '$144K/yr rent — you WILL lose money for months' },
 ];
 
 export const BUILDOUT_ITEMS = [
-  { id: 'basic_ops', name: 'Basic Operatory Buildout', costPerSqft: 200, sqftNeeded: 120, icon: '🔨', description: 'Plumbing, electrical, cabinetry for one operatory', required: true },
-  { id: 'premium_ops', name: 'Premium Operatory Buildout', costPerSqft: 275, sqftNeeded: 150, icon: '✨', description: 'High-end finishes, extra storage, better ergonomics' },
-  { id: 'waiting_area', name: 'Waiting Area', costPerSqft: 150, sqftNeeded: 200, icon: '🛋️', description: 'Reception and patient waiting area', required: true, satisfactionBonus: 5 },
-  { id: 'premium_waiting', name: 'Premium Waiting Area', costPerSqft: 250, sqftNeeded: 300, icon: '💎', description: 'Upscale waiting with beverage bar, TVs, kids area', satisfactionBonus: 20 },
-  { id: 'sterilization', name: 'Sterilization Center', costPerSqft: 225, sqftNeeded: 100, icon: '🧼', description: 'Dedicated sterilization and instrument processing', required: true, cleanlinessBonus: 15 },
-  { id: 'lab', name: 'In-House Lab', costPerSqft: 250, sqftNeeded: 150, icon: '🔬', description: 'On-site lab for quicker turnaround on crowns, etc.', revenueBonus: 200 },
-  { id: 'xray_room', name: 'X-Ray Suite', costPerSqft: 275, sqftNeeded: 80, icon: '📡', description: 'Dedicated imaging room with lead lining' },
-  { id: 'break_room', name: 'Staff Break Room', costPerSqft: 175, sqftNeeded: 120, icon: '☕', description: 'Kitchen and lounge for staff', moraleBonus: 10 },
-  { id: 'private_office', name: 'Private Office', costPerSqft: 200, sqftNeeded: 100, icon: '🏢', description: 'Doctor\'s private office', moraleBonus: 5 },
-  { id: 'consultation', name: 'Consultation Room', costPerSqft: 200, sqftNeeded: 100, icon: '💬', description: 'Private room for treatment planning', satisfactionBonus: 8, revenueBonus: 100 },
+  { id: 'basic_ops', name: 'Basic Operatory Buildout', costPerSqft: 350, sqftNeeded: 130, icon: '🔨', description: 'Plumbing, electrical, cabinetry, flooring for one operatory. ~$45K each.', required: true },
+  { id: 'premium_ops', name: 'Premium Operatory Buildout', costPerSqft: 475, sqftNeeded: 160, icon: '✨', description: 'High-end finishes, extra storage, better ergonomics. ~$76K each.' },
+  { id: 'waiting_area', name: 'Waiting Area', costPerSqft: 225, sqftNeeded: 200, icon: '🛋️', description: 'Reception desk, seating, check-in area. ~$45K', required: true, satisfactionBonus: 5 },
+  { id: 'premium_waiting', name: 'Premium Waiting Area', costPerSqft: 375, sqftNeeded: 300, icon: '💎', description: 'Upscale waiting with beverage bar, TVs, kids area. ~$112K', satisfactionBonus: 20 },
+  { id: 'sterilization', name: 'Sterilization Center', costPerSqft: 350, sqftNeeded: 100, icon: '🧼', description: 'Dedicated sterilization and instrument processing. ~$35K', required: true, cleanlinessBonus: 15 },
+  { id: 'lab', name: 'In-House Lab', costPerSqft: 400, sqftNeeded: 150, icon: '🔬', description: 'On-site lab for quicker crown turnaround. ~$60K', revenueBonus: 200 },
+  { id: 'xray_room', name: 'X-Ray Suite', costPerSqft: 450, sqftNeeded: 80, icon: '📡', description: 'Dedicated imaging room with lead lining. ~$36K' },
+  { id: 'break_room', name: 'Staff Break Room', costPerSqft: 225, sqftNeeded: 120, icon: '☕', description: 'Kitchen and lounge for staff. ~$27K', moraleBonus: 10 },
+  { id: 'private_office', name: 'Private Office', costPerSqft: 275, sqftNeeded: 100, icon: '🏢', description: 'Doctor\'s private office. ~$27K', moraleBonus: 5 },
+  { id: 'consultation', name: 'Consultation Room', costPerSqft: 300, sqftNeeded: 100, icon: '💬', description: 'Private room for treatment planning. ~$30K', satisfactionBonus: 8, revenueBonus: 100 },
 ];
 
 // ─── EQUIPMENT ───
@@ -2303,7 +2309,32 @@ export function calculateDailyStats(gameState) {
 
   // Apply HMO mechanics as multipliers to revenue
   const baseRevenue = patientsAfterNoShows * revenuePerPatient * skillMultiplier * avgInsuranceRate * labMultiplier;
-  const dailyRevenue = Math.round(baseRevenue * acceptanceMultiplier * emergencyPenalty * understaffedPenalty + capitationRevenue);
+  let dailyRevenue = Math.round(baseRevenue * acceptanceMultiplier * emergencyPenalty * understaffedPenalty + capitationRevenue);
+
+  // Insurance reimbursement delay — first 30 days, insurance money hasn't come in yet
+  // You're treating patients and submitting claims, but checks don't arrive for ~30 days
+  const gameDay = gameState.day || 1;
+  const insuranceShare = insurancePlanDetails.length > 0 ? (1 - effectiveCashShare) : 0;
+  if (gameDay <= INSURANCE_REIMBURSEMENT_DELAY && insuranceShare > 0) {
+    // Only collect cash-pay revenue during the float period
+    // Gradually ramp up: at day 1 = 0% insurance revenue, day 30 = 100%
+    const floatProgress = gameDay / INSURANCE_REIMBURSEMENT_DELAY;
+    const insRevenuePortion = dailyRevenue * insuranceShare;
+    const cashRevenuePortion = dailyRevenue * (1 - insuranceShare);
+    dailyRevenue = Math.round(cashRevenuePortion + insRevenuePortion * floatProgress);
+  }
+
+  // Credentialing delay — newly added insurance plans don't produce patients immediately
+  // Plans added mid-game have a credentialing period tracked in gameState.insuranceCredentialDays
+  const credentialDays = gameState.insuranceCredentialDays || {};
+  const uncredentialedPlans = allAcceptedPlans.filter(p => {
+    const startDay = credentialDays[p.id];
+    return startDay && (gameDay - startDay) < CREDENTIALING_DAYS;
+  });
+  if (uncredentialedPlans.length > 0 && allAcceptedPlans.length > 0) {
+    const credentialedShare = 1 - (uncredentialedPlans.length / allAcceptedPlans.length);
+    dailyRevenue = Math.round(dailyRevenue * (0.5 + 0.5 * credentialedShare)); // partial revenue while credentialing
+  }
 
   // Costs
   const dailySalaries = Math.round(staff.reduce((sum, s) => sum + s.salary, 0) / 365);
