@@ -157,8 +157,10 @@ function gradeFromScore(score) {
 }
 
 export function calculateScore(gameState, stats) {
+  try {
   const day = gameState.day;
-  if (day < 10) return null; // too early
+  if (day < 10) return null;
+  if (!stats || stats.dailyRevenue == null) return null;
 
   const monthlyRevenue = stats.dailyRevenue * 30;
   const monthlyCosts = stats.totalDailyCosts * 30;
@@ -166,189 +168,170 @@ export function calculateScore(gameState, stats) {
   const overheadRatio = monthlyRevenue > 0 ? monthlyCosts / monthlyRevenue : 1;
   const profitMargin = monthlyRevenue > 0 ? monthlyProfit / monthlyRevenue : -1;
   const revenuePerSqft = stats.annualRevenuePerSqft || 0;
+  const rep = gameState.reputation || 3;
 
   const categories = {};
 
-  // ── 1. OVERHEAD CONTROL (weight: 15%) ──
-  // Lower is better. Industry benchmark: 55-60% is good, under 50% is excellent
-  const ohScore = scoreFromRange(1 - overheadRatio, [
-    [0.55, 98], [0.48, 92], [0.42, 85], [0.38, 78], [0.33, 68],
-    [0.28, 58], [0.22, 45], [0.15, 32], [0.05, 18], [0, 5],
-  ]);
-  categories.overhead = {
-    name: 'Overhead Control', icon: '💸', score: ohScore, ...gradeFromScore(ohScore), weight: 15,
-    value: `${Math.round(overheadRatio * 100)}%`, target: '<60%',
-    tip: overheadRatio > 0.7 ? 'Too much staff, space, or equipment relative to revenue' : overheadRatio < 0.5 ? 'Excellent cost control' : 'Room to trim costs',
+  // ═══ 1. STAFFING & HR (weight: 20%) ═══
+  const staffCount = gameState.staff.length;
+  const avgMorale = staffCount > 0 ? gameState.staff.reduce((s, m) => s + (m.morale || 50), 0) / staffCount : 0;
+  const avgSkill = staffCount > 0 ? gameState.staff.reduce((s, m) => s + (m.skill || 50), 0) / staffCount : 0;
+  const hasDentist = gameState.staff.some(s => isProvider(s));
+  const hasFrontDesk = gameState.staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
+  const totalHires = gameState.totalHires || 0;
+  const totalFires = gameState.totalFires || 0;
+  const totalQuit = gameState.totalStaffQuit || 0;
+  const turnoverRate = totalHires > 0 ? (totalFires + totalQuit) / totalHires : 0;
+  // Composite: team quality (30%), morale (25%), key roles (20%), low turnover (15%), hiring volume (10%)
+  const roleBonus = (hasDentist ? 50 : 0) + (hasFrontDesk ? 50 : 0);
+  const turnoverPenalty = turnoverRate > 0.5 ? 30 : turnoverRate > 0.3 ? 15 : 0;
+  const hiringBonus = totalHires >= 3 ? 15 : totalHires >= 2 ? 10 : totalHires >= 1 ? 5 : 0;
+  let staffHRScore = Math.min(100, Math.round(
+    (avgSkill * 0.3) + (avgMorale * 0.25) + (roleBonus * 0.20) + ((100 - turnoverPenalty) * 0.15) + (hiringBonus / 15 * 100 * 0.10)
+  ));
+  if (staffCount === 0) staffHRScore = 5;
+  categories.staffingHR = {
+    name: 'Staffing & HR', icon: '👥', score: staffHRScore, ...gradeFromScore(staffHRScore), weight: 20,
+    value: `${staffCount} staff · ${Math.round(avgMorale)} morale · ${totalHires} hired`,
+    tip: staffCount === 0 ? 'No staff! You need people to run a practice' :
+         avgMorale < 40 ? 'Low morale leads to turnover and mistakes' :
+         turnoverRate > 0.4 ? 'High turnover is expensive — invest in retention' :
+         avgSkill < 50 ? 'Invest in training to boost your team\'s clinical skills' :
+         'Solid team management',
   };
 
-  // ── 2. PROFITABILITY (weight: 15%) ──
+  // ═══ 2. DOCTOR MANAGEMENT (weight: 15%) ═══
+  const doctors = gameState.staff.filter(s => isProvider(s));
+  const doctorCount = doctors.length;
+  const avgDoctorSkill = doctorCount > 0 ? doctors.reduce((s, d) => s + d.skill, 0) / doctorCount : 0;
+  const avgDoctorMorale = doctorCount > 0 ? doctors.reduce((s, d) => s + (d.morale || 50), 0) / doctorCount : 0;
+  const hasSpecialist = doctors.some(d => SPECIALIST_ROLES.includes(d.role));
+  let doctorScore = 10; // base
+  if (doctorCount >= 1) doctorScore += 25;
+  if (doctorCount >= 2) doctorScore += 15;
+  if (hasSpecialist) doctorScore += 15;
+  doctorScore += Math.round(avgDoctorSkill * 0.25);
+  doctorScore += Math.round(avgDoctorMorale * 0.15);
+  doctorScore = Math.min(100, doctorScore);
+  if (doctorCount === 0) doctorScore = 5;
+  categories.doctorMgmt = {
+    name: 'Doctor Management', icon: '👨‍⚕️', score: doctorScore, ...gradeFromScore(doctorScore), weight: 15,
+    value: `${doctorCount} doctor${doctorCount !== 1 ? 's' : ''}${hasSpecialist ? ' + specialist' : ''}`,
+    tip: doctorCount === 0 ? 'No doctors = no production. Hire a provider immediately' :
+         avgDoctorSkill > 80 ? 'High-quality providers driving great outcomes' :
+         !hasSpecialist ? 'Adding a specialist unlocks high-revenue procedures' :
+         'Doctor team is performing well',
+  };
+
+  // ═══ 3. TRAINING & DEVELOPMENT (weight: 15%) ═══
+  const completedTraining = (gameState.completedTraining || []).length;
+  const trainingSpend = gameState.totalTrainingSpend || 0;
+  const consultantSpend = gameState.totalConsultantSpend || 0;
+  const totalDevSpend = trainingSpend + consultantSpend;
+  const hasAcceptanceTraining = (gameState.completedTraining || []).includes('case_acceptance');
+  const hasVerbalSkills = (gameState.completedTraining || []).includes('verbal_skills');
+  let trainScore = 10;
+  trainScore += Math.min(30, completedTraining * 10); // up to 30 for programs
+  if (hasAcceptanceTraining) trainScore += 15; // bonus for revenue-driving training
+  if (hasVerbalSkills) trainScore += 10;
+  if (totalDevSpend > 10000) trainScore += 10;
+  if (totalDevSpend > 25000) trainScore += 10;
+  if (consultantSpend > 0) trainScore += 10; // hired outside help
+  trainScore = Math.min(100, trainScore);
+  categories.training = {
+    name: 'Training & Development', icon: '🎓', score: trainScore, ...gradeFromScore(trainScore), weight: 15,
+    value: `${completedTraining} programs · $${Math.round(totalDevSpend / 1000)}K invested`,
+    tip: completedTraining === 0 ? 'Zero training investment — your team isn\'t growing' :
+         !hasAcceptanceTraining ? 'Case Acceptance Training is the #1 revenue lever in dentistry' :
+         totalDevSpend > 20000 ? 'Strong commitment to professional development' :
+         'Good start — keep investing in your team\'s growth',
+  };
+
+  // ═══ 4. MARKETING & GROWTH (weight: 20%) ═══
+  const marketingChannels = [...new Set(gameState.marketingChannelsUsed || [])].length;
+  const marketingSpend = gameState.totalMarketingSpend || 0;
+  const activeMarketing = (gameState.activeMarketing || []).length;
+  const patientsPerDay = gameState.patients / Math.max(day, 1);
+  let mktgScore = 10;
+  if (marketingChannels >= 1) mktgScore += 15;
+  if (marketingChannels >= 2) mktgScore += 10;
+  if (marketingChannels >= 3) mktgScore += 10;
+  if (activeMarketing >= 1) mktgScore += 10;
+  if (activeMarketing >= 2) mktgScore += 5;
+  if (marketingSpend > 5000) mktgScore += 5;
+  if (marketingSpend > 15000) mktgScore += 5;
+  // Patient growth rate bonus
+  mktgScore += Math.min(20, Math.round(patientsPerDay * 8));
+  if (rep >= 4.0) mktgScore += 5; // reputation supports organic growth
+  mktgScore = Math.min(100, mktgScore);
+  if (marketingSpend === 0 && activeMarketing === 0) mktgScore = Math.min(mktgScore, 30);
+  categories.marketingGrowth = {
+    name: 'Marketing & Growth', icon: '📢', score: mktgScore, ...gradeFromScore(mktgScore), weight: 20,
+    value: `${gameState.patients} patients · ${marketingChannels} channels · $${Math.round(marketingSpend / 1000)}K spend`,
+    tip: marketingSpend === 0 ? 'No marketing investment — patients won\'t find you by accident' :
+         marketingChannels <= 1 ? 'Diversify your marketing — don\'t rely on one channel' :
+         patientsPerDay < 1 ? 'Patient growth is too slow — boost marketing or fix reputation' :
+         'Marketing is driving solid growth',
+  };
+
+  // ═══ 5. FINANCIAL MANAGEMENT (weight: 15%) ═══
+  const totalRev = gameState.totalRevenue || 0;
+  const totalExp = gameState.totalExpenses || 0;
+  const cashScore = scoreFromRange(gameState.cash, [
+    [500000, 98], [300000, 92], [200000, 85], [100000, 75], [50000, 62],
+    [20000, 48], [0, 32], [-20000, 15], [-50000, 5],
+  ]);
   const pmScore = scoreFromRange(profitMargin, [
     [0.45, 98], [0.38, 92], [0.32, 85], [0.25, 75], [0.18, 65],
     [0.12, 55], [0.06, 42], [0.02, 28], [0, 15], [-1, 3],
   ]);
-  categories.profitMargin = {
-    name: 'Profitability', icon: '📈', score: pmScore, ...gradeFromScore(pmScore), weight: 15,
-    value: `${Math.round(profitMargin * 100)}%`, target: '30%+',
-    tip: profitMargin < 0 ? 'Losing money — revenue must exceed costs' : profitMargin < 0.15 ? 'Thin margins — overhead may be too high' : 'Healthy profits',
+  const finScore = Math.round(pmScore * 0.4 + cashScore * 0.3 + scoreFromRange(1 - overheadRatio, [
+    [0.55, 98], [0.48, 92], [0.42, 85], [0.38, 78], [0.33, 68],
+    [0.28, 58], [0.22, 45], [0.15, 32], [0.05, 18], [0, 5],
+  ]) * 0.3);
+  categories.financial = {
+    name: 'Financial Management', icon: '💰', score: finScore, ...gradeFromScore(finScore), weight: 15,
+    value: `$${Math.round(monthlyProfit).toLocaleString()}/mo profit · ${Math.round(overheadRatio * 100)}% overhead`,
+    tip: profitMargin < 0 ? 'Losing money every month — cut overhead or grow revenue' :
+         overheadRatio > 0.7 ? 'Overhead is dangerously high — your costs eat your revenue' :
+         profitMargin > 0.3 ? 'Excellent financial health — strong margins' :
+         gameState.cash < 0 ? 'Negative cash is a death spiral — act fast' :
+         'Keep monitoring margins and building cash reserves',
   };
 
-  // ── 3. PATIENT ATTRACTION & GROWTH (weight: 12%) ──
-  // How well did you grow your patient base? Measured by final patient count relative to days played
-  const patientsPerDay = gameState.patients / Math.max(day, 1);
-  const paScore = scoreFromRange(patientsPerDay, [
-    [5, 98], [3.5, 90], [2.5, 80], [1.8, 70], [1.2, 58],
-    [0.8, 45], [0.5, 32], [0.2, 18], [0, 5],
-  ]);
-  categories.patientGrowth = {
-    name: 'Patient Attraction', icon: '🧲', score: paScore, ...gradeFromScore(paScore), weight: 12,
-    value: `${gameState.patients} patients`, target: 'Steady growth',
-    tip: gameState.patients < 30 ? 'Marketing and reputation drive new patients' : gameState.patients > 200 ? 'Strong patient base — protect it' : 'Growing nicely',
-  };
-
-  // ── 4. PATIENT SATISFACTION (weight: 12%) ──
-  const sat = stats.satisfactionScore;
+  // ═══ 6. PATIENT CARE & REPUTATION (weight: 15%) ═══
+  const sat = stats.satisfactionScore || 0.5;
+  const acceptanceRate = stats.blendedTreatmentAcceptance || 0.75;
   const satScore = scoreFromRange(sat, [
     [0.90, 98], [0.82, 90], [0.74, 80], [0.66, 70], [0.58, 58],
     [0.50, 45], [0.40, 32], [0.30, 18], [0, 5],
   ]);
-  categories.satisfaction = {
-    name: 'Patient Satisfaction', icon: '😊', score: satScore, ...gradeFromScore(satScore), weight: 12,
-    value: `${Math.round(sat * 100)}%`, target: '80%+',
-    tip: sat < 0.5 ? 'Staff attitude, cleanliness, wait times all affect satisfaction' : 'Patients are happy with your practice',
-  };
-
-  // ── 5. REPUTATION (weight: 10%) ──
-  const rep = gameState.reputation;
   const repScore = scoreFromRange(rep, [
     [4.8, 98], [4.5, 92], [4.2, 84], [3.8, 74], [3.5, 64],
     [3.0, 50], [2.5, 35], [2.0, 20], [0, 5],
   ]);
-  categories.reputation = {
-    name: 'Online Reputation', icon: '⭐', score: repScore, ...gradeFromScore(repScore), weight: 10,
-    value: `${rep.toFixed(1)} stars`, target: '4.0+',
-    tip: rep < 3.0 ? 'Bad reviews kill patient acquisition' : rep >= 4.5 ? 'Premium reputation — charge premium fees' : 'Build reviews through great experiences',
-  };
-
-  // ── 6. SPACE UTILIZATION (weight: 8%) ──
-  const sqftScore = scoreFromRange(revenuePerSqft, [
-    [220, 98], [180, 90], [150, 80], [120, 68], [90, 55],
-    [60, 40], [30, 25], [0, 8],
+  const acceptScore = scoreFromRange(acceptanceRate, [
+    [0.92, 98], [0.85, 88], [0.78, 75], [0.70, 62], [0.60, 48],
+    [0.50, 35], [0.40, 20], [0, 5],
   ]);
-  categories.spaceUtilization = {
-    name: 'Space Utilization', icon: '📐', score: sqftScore, ...gradeFromScore(sqftScore), weight: 8,
-    value: `$${revenuePerSqft}/sqft/yr`, target: '$150+',
-    tip: revenuePerSqft < 80 ? 'Too much space for your patient volume' : 'Efficient use of space',
+  const patientCareScore = Math.round(satScore * 0.35 + repScore * 0.35 + acceptScore * 0.30);
+  categories.patientCare = {
+    name: 'Patient Care & Reputation', icon: '⭐', score: patientCareScore, ...gradeFromScore(patientCareScore), weight: 15,
+    value: `${rep.toFixed(1)} stars · ${Math.round(sat * 100)}% satisfaction · ${Math.round(acceptanceRate * 100)}% acceptance`,
+    tip: rep < 3.0 ? 'Bad reviews are killing your practice — fix cleanliness and staffing' :
+         sat < 0.6 ? 'Patients are unhappy — check wait times, staff attitude, and office condition' :
+         acceptanceRate < 0.7 ? 'Low case acceptance — invest in Case Acceptance Training' :
+         rep >= 4.5 ? 'Premium reputation — patients seek you out' :
+         'Good patient experience — keep building',
   };
-
-  // ── 7. STAFF MANAGEMENT (weight: 10%) ──
-  const staffCount = gameState.staff.length;
-  const avgMorale = staffCount > 0 ? gameState.staff.reduce((s, m) => s + m.morale, 0) / staffCount : 0;
-  const avgSkill = staffCount > 0 ? gameState.staff.reduce((s, m) => s + m.skill, 0) / staffCount : 0;
-  const hasDentist = gameState.staff.some(s => s.role === 'Dentist' || s.role === 'Specialist');
-  const hasFrontDesk = gameState.staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
-  // Composite: morale (40%), skill (30%), having key roles (30%)
-  const roleScore = (hasDentist ? 50 : 0) + (hasFrontDesk ? 50 : 0);
-  const staffScore = Math.min(100, Math.round(
-    (avgMorale * 0.4) + (avgSkill * 0.3) + (roleScore * 0.3)
-  ));
-  categories.staffManagement = {
-    name: 'Staff Management', icon: '👥', score: staffCount === 0 ? 5 : staffScore, ...gradeFromScore(staffCount === 0 ? 5 : staffScore), weight: 10,
-    value: `${staffCount} staff, ${Math.round(avgMorale)} morale`, target: 'Skilled & happy team',
-    tip: avgMorale < 40 ? 'Burned out staff quit and make mistakes' : avgSkill < 50 ? 'Invest in training to boost skills' : 'Team is solid',
-  };
-
-  // ── 8. TRAINING & DEVELOPMENT (weight: 5%) ──
-  const completedTraining = (gameState.completedTraining || []).length;
-  const trainScore = scoreFromRange(completedTraining, [
-    [5, 98], [4, 88], [3, 75], [2, 60], [1, 40], [0, 10],
-  ]);
-  categories.training = {
-    name: 'Training & Development', icon: '🎓', score: trainScore, ...gradeFromScore(trainScore), weight: 5,
-    value: `${completedTraining} programs`, target: '3+ programs',
-    tip: completedTraining === 0 ? 'Training offsets hiring friction and builds skills' : 'Good investment in your team',
-  };
-
-  // ── 9. INSURANCE STRATEGY (weight: 8%) ──
-  const accepted = gameState.acceptedInsurance || [];
-  const hasCash = accepted.includes('cash_only');
-  const insPlans = accepted.filter(id => id !== 'cash_only');
-  const hmoCount = insPlans.filter(id => {
-    const p = INSURANCE_PLANS.find(plan => plan.id === id);
-    return p && (p.type === 'hmo' || p.type === 'medicaid');
-  }).length;
-  // Good strategy: not too many plans, good mix, cash patients if rep supports it
-  // HMO-aware scoring: reward well-run HMO practices
-  const capacityUsage = stats.effectiveCapacity > 0 ? stats.actualPatients / stats.effectiveCapacity : 0;
-  const isAdequatelyStaffed = !stats.understaffedPenalty;
-  let insScore = 50; // baseline
-  if (accepted.length === 0) insScore = 20; // no insurance at all — risky
-  else if (hasCash && insPlans.length <= 2 && rep >= 3.5) insScore = 92; // premium mix
-  else if (hasCash && insPlans.length <= 3) insScore = 78;
-  else if (insPlans.length >= 6) insScore = 25; // way too many plans
-  else if (hmoCount >= 2 && isAdequatelyStaffed && overheadRatio < 0.55 && capacityUsage < 0.85) insScore = 85; // lean HMO machine
-  else if (hmoCount >= 2 && isAdequatelyStaffed && overheadRatio < 0.65) insScore = 70; // HMO working but tight
-  else if (hmoCount >= 2 && !isAdequatelyStaffed) insScore = 40; // volume without staff
-  else if (insPlans.length >= 4 && hmoCount >= 2) insScore = 35; // HMO mess
-  else if (insPlans.length <= 3) insScore = 68; // decent selectivity
-  else insScore = 45; // somewhat bloated
-  // Bonus for cash share
-  if (hasCash && (stats.effectiveCashShare || 0) > 0.15) insScore = Math.min(100, insScore + 10);
-  categories.insuranceStrategy = {
-    name: 'Insurance Strategy', icon: '🏥', score: insScore, ...gradeFromScore(insScore), weight: 8,
-    value: `${accepted.length} plans${hasCash ? ' + cash' : ''}`, target: 'Selective & strategic',
-    tip: accepted.length >= 5 ? 'Too many plans — admin costs and cannibalization hurting you' :
-         hasCash && rep >= 4 ? 'Cash patient base is growing with reputation' :
-         'Be strategic — drop low-value plans as reputation builds',
-  };
-
-  // ── 10. CASH MANAGEMENT (weight: 5%) ──
-  const cashScore = scoreFromRange(gameState.cash, [
-    [500000, 98], [300000, 90], [200000, 82], [100000, 72], [50000, 60],
-    [20000, 48], [0, 30], [-20000, 15], [-50000, 5],
-  ]);
-  categories.cashManagement = {
-    name: 'Cash Management', icon: '💰', score: cashScore, ...gradeFromScore(cashScore), weight: 5,
-    value: `$${gameState.cash.toLocaleString()}`, target: 'Positive & growing',
-    tip: gameState.cash < 0 ? 'Negative cash triggers spiral — cut costs NOW' : gameState.cash > 200000 ? 'Strong reserves' : 'Keep building reserves',
-  };
-
-  // ── 11. EMPIRE MANAGEMENT (conditional — only when multi-location) ──
-  const locCount = 1 + (gameState.locations || []).length;
-  if (locCount > 1) {
-    const allLocs = gameState.locations || [];
-    const hasRM = locCount <= 3 || gameState.hasRegionalManager;
-    const avgLocRep = allLocs.length > 0 ? allLocs.reduce((s, l) => s + (l.reputation || 3), 0) / allLocs.length : 0;
-    let empScore = 30; // base
-    if (locCount >= 2) empScore += 10;
-    if (locCount >= 3) empScore += 10;
-    if (locCount >= 5) empScore += 10;
-    if (hasRM) empScore += 15;
-    if (avgLocRep >= 4.0) empScore += 15;
-    if (avgLocRep >= 3.5) empScore += 10;
-    empScore = Math.min(100, empScore);
-    categories.empireManagement = {
-      name: 'Empire Management', icon: '🏢', score: empScore, ...gradeFromScore(empScore), weight: 8,
-      value: `${locCount} locations`, target: 'All profitable + managed',
-      tip: !hasRM && locCount > 3 ? 'Hire a Regional Manager — you\'re losing 15% efficiency' : locCount <= 2 ? 'Expand to unlock synergies' : 'Growing empire',
-    };
-    // Redistribute weights: reduce overhead 15→13, profit 15→14, cash 5→3
-    if (categories.overhead) categories.overhead.weight = 13;
-    if (categories.profitMargin) categories.profitMargin.weight = 14;
-    if (categories.cashManagement) categories.cashManagement.weight = 3;
-  }
 
   // ── CALCULATE OVERALL (1-1000) ──
   const categoryList = Object.values(categories);
   const totalWeight = categoryList.reduce((s, c) => s + c.weight, 0);
-  // Weighted average of sub-scores (each 0-100), then scale to 1-1000
   const weightedAvg = categoryList.reduce((s, c) => s + (c.score * c.weight), 0) / totalWeight;
-  // Map to 1-1000 with some non-linearity to spread the middle
-  // A perfect 100 avg = 1000, a 50 avg = ~500, a 0 avg = 1
-  // Apply difficulty score multiplier (Hell Mode = 1.5x)
   const scoreMultiplier = gameState.scoreMultiplier || 1;
   const overall = Math.max(1, Math.min(1000, Math.round(weightedAvg * 10 * scoreMultiplier)));
 
-  // Letter grade from the 1000 scale
   let overallGrade, overallColor;
   if (overall >= 900) { overallGrade = 'A+'; overallColor = '#22c55e'; }
   else if (overall >= 800) { overallGrade = 'A'; overallColor = '#22c55e'; }
@@ -362,7 +345,7 @@ export function calculateScore(gameState, stats) {
 
   return {
     categories,
-    grades: categories, // backward compat
+    grades: categories,
     overall,
     overallGrade,
     overallColor,
@@ -372,8 +355,18 @@ export function calculateScore(gameState, stats) {
       monthlyRevenue,
       monthlyProfit,
       revenuePerSqft,
+      totalRevenue: totalRev,
+      totalExpenses: totalExp,
+      totalPatientsServed: gameState.totalPatientsServed || 0,
+      peakPatients: gameState.peakPatients || gameState.patients,
+      peakCash: gameState.peakCash || gameState.cash,
+      turnoverRate: Math.round(turnoverRate * 100),
     },
   };
+  } catch (e) {
+    console.error('calculateScore error:', e);
+    return null;
+  }
 }
 
 // ─── EXPERT MODE: ADDITIONAL EVENTS ───
@@ -721,7 +714,8 @@ export const LOCATION_OPTIONS = [
     sqft: 3500, rent: 9000, maxOps: 7, setupCost: 500000, buildoutDays: 90,
     description: 'High-end location in an affluent area. Premium patients, premium costs. Only attempt with proven cash flow.',
     minReputation: 4.2, minPatients: 250, minCash: 600000,
-    staffMinimum: { 'Dentist': 1, 'Specialist': 1, 'Hygienist': 2, 'Front Desk': 1, 'Dental Assistant': 1 },
+    staffMinimum: { 'Dentist': 1, 'Hygienist': 2, 'Front Desk': 1, 'Dental Assistant': 1 },
+    requiresSpecialist: true, // at least one specialist of any type
   },
 ];
 
@@ -921,6 +915,12 @@ export const TRAINING_PROGRAMS = [
   { id: 'leadership', name: 'Leadership Development', cost: 8000, duration: 5,
     icon: '⭐', description: 'Leadership training for senior staff. Reduces turnover, improves team dynamics.',
     moraleBoost: 15, turnoverReduction: 0.3 },
+  { id: 'case_acceptance', name: 'Case Acceptance & Sales Training', cost: 6000, duration: 3,
+    icon: '💰', description: 'Train your entire team on treatment presentation, financial options, and closing. The #1 revenue lever in dentistry — same patients, same insurance, more procedures accepted. Stacks up to 3x.',
+    treatmentAcceptanceBoost: 0.08, moraleBoost: 3, stackable: true, maxStacks: 3 },
+  { id: 'verbal_skills', name: 'Verbal Skills for Hygienists', cost: 4000, duration: 2,
+    icon: '🗣️', description: 'Teach hygienists to identify and communicate treatment needs during cleanings. Hygienists see patients more than you do — make them your best salespeople.',
+    treatmentAcceptanceBoost: 0.05, skillBoost: 4, clinicalOnly: true },
 ];
 
 // ─── OPPOSING FORCES TIPS ───
@@ -1023,7 +1023,7 @@ export function checkConsultantRequirements(consultant, gameState, stats) {
     let met = false;
     switch (req.check) {
       case 'minStaff': met = gameState.staff.length >= req.value; break;
-      case 'hasDentist': met = gameState.staff.some(s => s.role === 'Dentist' || s.role === 'Specialist'); break;
+      case 'hasDentist': met = gameState.staff.some(s => isProvider(s)); break;
       case 'hasFrontDesk': met = gameState.staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager'); break;
       case 'hasMarketing': met = (gameState.activeMarketing || []).length > 0; break;
       case 'avgMorale': {
@@ -1193,148 +1193,127 @@ export function generateSeasonFeedback(gameState, stats, difficulty) {
   const feedback = [];
   const score = calculateScore(gameState, stats);
   if (!score) return feedback;
+  const cats = score.categories;
 
-  // Overhead analysis
-  if (score.grades.overhead.score >= 80) {
-    feedback.push({ area: 'Overhead Control', grade: score.grades.overhead.grade, type: 'strength',
-      text: 'You kept your overhead under control. This is the #1 factor in practice profitability.' });
-  } else if (score.grades.overhead.score < 50) {
-    feedback.push({ area: 'Overhead Control', grade: score.grades.overhead.grade, type: 'weakness',
-      text: `Your overhead ratio was ${score.metrics.overheadRatio}%. Target is under 60%. You may have too much staff, space, or equipment relative to revenue.` });
-  }
+  // Category-based feedback — strengths and weaknesses
+  Object.values(cats).forEach(cat => {
+    if (cat.score >= 80) {
+      feedback.push({ area: cat.name, grade: cat.grade, type: 'strength', text: cat.tip });
+    } else if (cat.score < 40) {
+      feedback.push({ area: cat.name, grade: cat.grade, type: 'weakness', text: cat.tip });
+    }
+  });
 
-  // Profit analysis
-  if (score.grades.profitMargin.score >= 80) {
-    feedback.push({ area: 'Profitability', grade: score.grades.profitMargin.grade, type: 'strength',
-      text: 'Strong profit margins. You balanced revenue growth with cost control effectively.' });
-  } else if (score.grades.profitMargin.score < 50) {
-    feedback.push({ area: 'Profitability', grade: score.grades.profitMargin.grade, type: 'weakness',
-      text: `Profit margin was only ${score.metrics.profitMargin}%. Revenue per patient may be too low (bad insurance mix?) or costs too high.` });
-  }
-
-  // Revenue per sqft
-  if (score.grades.revenuePerSqft.score >= 75) {
-    feedback.push({ area: 'Space Utilization', grade: score.grades.revenuePerSqft.grade, type: 'strength',
-      text: 'Good revenue per square foot. Your space is being used efficiently.' });
-  } else if (score.grades.revenuePerSqft.score < 40) {
-    feedback.push({ area: 'Space Utilization', grade: score.grades.revenuePerSqft.grade, type: 'weakness',
-      text: `Only $${score.metrics.revenuePerSqft}/sqft/year. You may have too much space for your patient volume. Consider a smaller office next time.` });
-  }
-
-  // Reputation
-  if (score.grades.reputation.score >= 85) {
-    feedback.push({ area: 'Reputation', grade: score.grades.reputation.grade, type: 'strength',
-      text: 'Excellent reputation! Patients love your practice. This drives cash patient growth.' });
-  } else if (score.grades.reputation.score < 50) {
-    feedback.push({ area: 'Reputation', grade: score.grades.reputation.grade, type: 'weakness',
-      text: 'Low reputation hurts patient acquisition and blocks premium insurance plans. Focus on satisfaction, cleanliness, and not overbooking.' });
-  }
-
-  // Satisfaction
-  if (score.grades.satisfaction.score >= 70) {
-    feedback.push({ area: 'Patient Satisfaction', grade: score.grades.satisfaction.grade, type: 'strength',
-      text: 'Patients are happy. Good staff attitudes and office quality make the difference.' });
-  } else if (score.grades.satisfaction.score < 40) {
-    feedback.push({ area: 'Patient Satisfaction', grade: score.grades.satisfaction.grade, type: 'weakness',
-      text: 'Patient satisfaction is low. This comes from staff attitude, wait times, cleanliness, and overbooking.' });
-  }
-
-  // Insurance mix analysis
+  // Specific cause-and-effect insights
+  const completedTraining = (gameState.completedTraining || []).length;
+  const hasAcceptanceTraining = (gameState.completedTraining || []).includes('case_acceptance');
+  const marketingChannels = [...new Set(gameState.marketingChannelsUsed || [])].length;
+  const marketingSpend = gameState.totalMarketingSpend || 0;
+  const totalHires = gameState.totalHires || 0;
+  const totalFires = gameState.totalFires || 0;
   const accepted = gameState.acceptedInsurance || [];
-  const hmoCount = accepted.filter(id => {
-    const p = INSURANCE_PLANS.find(plan => plan.id === id);
-    return p && (p.type === 'hmo' || p.type === 'medicaid');
-  }).length;
-  if (accepted.length >= 5) {
-    feedback.push({ area: 'Insurance Strategy', grade: 'C', type: 'tip',
-      text: 'You accepted too many insurance plans. This increases admin costs and cannibalizes your cash patients. Be more selective.' });
+
+  if (marketingSpend === 0 && gameState.patients < 80) {
+    feedback.push({ area: 'Missed Opportunity', type: 'tip',
+      text: 'You never invested in marketing. New patients don\'t appear from nowhere. Aggressive marketing in Year 1 is the difference between survival and failure.' });
   }
-  if (hmoCount >= 2 && gameState.staff.length < 5) {
-    feedback.push({ area: 'HMO Strategy', grade: 'D', type: 'tip',
-      text: 'HMO understaffed. Volume without capacity = burnout and lost revenue. You needed more assistants and front desk to make the volume play work.' });
+  if (marketingChannels === 1) {
+    feedback.push({ area: 'Marketing Diversity', type: 'tip',
+      text: 'Only one marketing channel used. Diversify across Google Ads, social media, and direct mail to reach different patient demographics.' });
   }
-  if (hmoCount >= 2 && gameState.staff.length >= 5 && overheadRatio < 0.65) {
-    feedback.push({ area: 'HMO Strategy', grade: 'B', type: 'strength',
-      text: 'High-volume HMO practice — thin margins but large panel. Capitation checks kept you afloat. Well staffed and lean.' });
+  if (completedTraining === 0) {
+    feedback.push({ area: 'Training Gap', type: 'weakness',
+      text: 'Zero training programs completed. Your staff stagnated. Even one Case Acceptance Training could have boosted revenue 10-15%.' });
   }
-  if (hmoCount >= 1 && hmoCount < 3 && accepted.filter(id => { const p = INSURANCE_PLANS.find(plan => plan.id === id); return p?.type === 'ppo'; }).length >= 2) {
-    feedback.push({ area: 'Insurance Mix', grade: 'B', type: 'tip',
-      text: 'Smart mix — PPO margins funded growth while HMO filled chairs. This balance is hard to maintain but rewarding when it works.' });
+  if (!hasAcceptanceTraining && gameState.patients > 50) {
+    feedback.push({ area: 'Revenue Lever', type: 'tip',
+      text: 'Never invested in Case Acceptance Training — the biggest revenue lever in dentistry. Same patients, same insurance, more procedures accepted.' });
   }
-  if (accepted.includes('cash_only') && accepted.length > 3) {
-    feedback.push({ area: 'Cash vs Insurance', grade: 'C', type: 'tip',
-      text: 'You had cash patients but also many insurance plans. Those insurance plans were stealing your cash patients (cannibalization). Pick a lane.' });
+  if (totalFires + (gameState.totalStaffQuit || 0) > totalHires * 0.4 && totalHires > 2) {
+    feedback.push({ area: 'Staff Retention', type: 'weakness',
+      text: `High turnover: ${totalFires} fired, ${gameState.totalStaffQuit || 0} quit. Each departure costs 3-6 months of productivity.` });
+  }
+  if (accepted.includes('cash_only') && accepted.length > 4) {
+    feedback.push({ area: 'Cash Erosion', type: 'tip',
+      text: 'Cash patients with too many insurance plans = cannibalization. Those plans steal your full-fee patients.' });
+  }
+  if (gameState.cash < 0) {
+    feedback.push({ area: 'Cash Crisis', type: 'weakness',
+      text: `Ended $${Math.abs(gameState.cash).toLocaleString()} in the red. Budget 3-6 months of reserves to survive the insurance reimbursement delay.` });
   }
 
-  // Staffing analysis
-  if (gameState.staff.length === 0) {
-    feedback.push({ area: 'Staffing', grade: 'F', type: 'weakness',
-      text: 'You ended with no staff. A practice cannot run without people.' });
-  } else {
-    const avgMorale = gameState.staff.reduce((s, m) => s + m.morale, 0) / gameState.staff.length;
-    if (avgMorale < 35) {
-      feedback.push({ area: 'Staff Morale', grade: 'D', type: 'weakness',
-        text: `Average morale was ${Math.round(avgMorale)}. Burned-out staff quit, make mistakes, and drive patients away. Invest in training and culture.` });
+  // Pipeline tips
+  const hasDentist = gameState.staff.some(s => isProvider(s));
+  const hasHygienist = gameState.staff.some(s => s.role === 'Hygienist');
+  const hasFrontDesk = gameState.staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
+  if (hasDentist && !hasHygienist) {
+    feedback.push({ area: 'Pipeline Gap', type: 'tip',
+      text: 'No hygienist. The hygiene department generates 30-40% of revenue and feeds treatment to the doctor. You left $200K+ on the table.' });
+  }
+  if (marketingSpend > 0 && !hasFrontDesk) {
+    feedback.push({ area: 'Broken Pipeline', type: 'weakness',
+      text: 'Marketing without front desk = wasted money. Patient journey: Marketing → Phone → Front Desk → Hygienist → Doctor.' });
+  }
+
+  // ── Real-world dental practice insights ──
+  const overheadRatio = stats.dailyRevenue > 0 ? stats.totalDailyCosts / stats.dailyRevenue : 1;
+  const hasSpecialist = gameState.staff.some(s => SPECIALIST_ROLES.includes(s.role));
+  const staffCount = gameState.staff.length;
+  const rep = gameState.reputation || 3;
+
+  // Overhead benchmarks (real-world: healthy practices run 55-65% overhead)
+  if (overheadRatio > 0.75 && overheadRatio < 2) {
+    feedback.push({ area: 'Overhead Crisis', type: 'weakness',
+      text: `Your overhead is ${Math.round(overheadRatio * 100)}%. Industry benchmark is 55-65%. Above 70% means you're working for your staff and landlord, not yourself. The #1 cause: too many staff for your patient volume.` });
+  } else if (overheadRatio < 0.55 && stats.dailyRevenue > 100) {
+    feedback.push({ area: 'Lean Machine', type: 'strength',
+      text: `${Math.round(overheadRatio * 100)}% overhead — below the 55% industry floor. Extremely lean. Just make sure you're not under-staffing and burning out.` });
+  }
+
+  // Specialist management wisdom
+  if (hasSpecialist && staffCount < 5) {
+    feedback.push({ area: 'Specialist Strategy', type: 'tip',
+      text: 'Specialists generate revenue but need support staff. Without enough assistants and front desk, the specialist sits idle between patients. Budget 1.5 support staff per specialist.' });
+  }
+
+  // Insurance strategy based on practice maturity
+  if (accepted.length > 5 && rep >= 4.0) {
+    feedback.push({ area: 'Insurance Bloat', type: 'tip',
+      text: `${accepted.length} insurance plans at ${rep.toFixed(1)} stars. High-reputation practices should DROP low-paying PPOs. Fewer plans = less admin, better margins, same patient volume. The "PPO dropout" strategy is the most powerful move in practice management.` });
+  }
+  if (accepted.length <= 2 && gameState.patients < 60 && gameState.day > 60) {
+    feedback.push({ area: 'Insurance Gap', type: 'weakness',
+      text: 'Only accepting 1-2 insurance plans with low patient count. In the early phase, cast a wide net. You can always drop plans later once demand exceeds capacity.' });
+  }
+
+  // Production per provider (real metric used by dental consultants)
+  const providerCount = gameState.staff.filter(s => isProvider(s)).length;
+  if (providerCount > 0 && stats.dailyRevenue > 0) {
+    const dailyProductionPerProvider = stats.dailyRevenue / providerCount;
+    const monthlyProdPerProvider = dailyProductionPerProvider * 22; // working days
+    if (monthlyProdPerProvider < 40000) {
+      feedback.push({ area: 'Low Production', type: 'tip',
+        text: `$${Math.round(monthlyProdPerProvider).toLocaleString()}/month per provider. Target: $50-80K for GPs, $80-120K for specialists. Low production = not enough patients, too much downtime, or low case acceptance.` });
+    } else if (monthlyProdPerProvider > 80000) {
+      feedback.push({ area: 'High Producer', type: 'strength',
+        text: `$${Math.round(monthlyProdPerProvider).toLocaleString()}/month per provider — elite production. Real practices with this output are generating $1M+ annually per doctor.` });
     }
   }
 
-  // Cash position
-  if (gameState.cash < 0) {
-    feedback.push({ area: 'Cash Management', grade: 'F', type: 'weakness',
-      text: `You ended in the red ($${gameState.cash.toLocaleString()}). The #1 reason practices fail is running out of cash before revenue catches up.` });
-  } else if (gameState.cash > 200000) {
-    feedback.push({ area: 'Cash Management', grade: 'A', type: 'strength',
-      text: 'Healthy cash reserves. You avoided the cash spiral that kills most startups.' });
+  // Staff-to-patient ratio wisdom
+  if (gameState.patients > 100 && staffCount < 4) {
+    feedback.push({ area: 'Understaffed', type: 'weakness',
+      text: `${gameState.patients} patients with only ${staffCount} staff. Industry standard: 1 FTE per 25-30 active patients. You need ${Math.ceil(gameState.patients / 28)} staff minimum. Patients are waiting too long and leaving.` });
   }
 
-  // ── REAL-WORLD DENTAL PRACTICE TIPS ──
-  // Always add 2-3 actionable tips based on what happened in their game
-  const tips = [];
-
-  // Revenue per patient benchmark
-  const revPerPatient = gameState.patients > 0 ? Math.round((stats.dailyRevenue * 365) / gameState.patients) : 0;
-  if (revPerPatient < 400) {
-    tips.push('Real-world benchmark: the average dental practice generates $500-$750 per patient of record annually. Your revenue per patient is low — focus on case acceptance and treatment planning.');
-  } else if (revPerPatient > 600) {
-    tips.push('Your revenue per patient is strong. In real practices, this comes from thorough exams, proper diagnosis, and a hygiene department that hands off treatment opportunities to the doctor.');
+  // Morale = retention = revenue (real-world connection)
+  const avgMorale = staffCount > 0 ? gameState.staff.reduce((s, m) => s + (m.morale || 50), 0) / staffCount : 0;
+  if (avgMorale < 35 && staffCount > 2) {
+    feedback.push({ area: 'Morale Emergency', type: 'weakness',
+      text: `Average staff morale: ${Math.round(avgMorale)}. In real practices, low morale = gossip, call-outs, and mass exodus. The average cost to replace one dental assistant is $15-25K when you factor in recruiting, training, and lost productivity.` });
   }
 
-  // Hygiene/doctor balance
-  const hasDentist = gameState.staff.some(s => s.role === 'Dentist' || s.role === 'Specialist');
-  const hasHygienist = gameState.staff.some(s => s.role === 'Hygienist');
-  if (hasDentist && !hasHygienist) {
-    tips.push('You have a doctor but no hygienist. In a real practice, the hygiene department is your pipeline — hygienists clean teeth, identify issues, and hand off treatment to the doctor. Without hygiene, you\'re leaving money on the table.');
-  }
-  if (hasHygienist && hasDentist) {
-    tips.push('Good setup: hygienist + doctor is the core revenue engine. In real practices, a solid hygiene recall program generates 30-40% of total revenue and feeds treatment opportunities to the doctor through exams.');
-  }
-
-  // Marketing → Front Desk → Hygiene → Doctor pipeline
-  const hasFrontDesk = gameState.staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
-  const hasMarketing = (gameState.activeMarketing || []).length > 0;
-  if (hasMarketing && !hasFrontDesk) {
-    tips.push('You invested in marketing but have no front desk staff. In reality, marketing dollars are wasted if nobody answers the phone. The patient journey is: Marketing → Phone Call → Front Desk → Hygienist → Doctor. Break any link and patients are lost.');
-  }
-  if (!hasMarketing && gameState.patients < 50) {
-    tips.push('No marketing with a small patient base is a slow death. New practices need aggressive marketing to build patient volume. Word of mouth alone takes 2-3 years to sustain a practice.');
-  }
-
-  // Insurance float reality
-  if (gameState.day <= 60) {
-    tips.push('Early cash crunch is normal. In real dental startups, insurance reimbursements take 30-45 days. You\'re treating patients today but won\'t see the money for a month. Smart owners budget 3-6 months of operating expenses as reserves.');
-  }
-
-  // Debt management
-  if (gameState.debt > 0 && gameState.debt > gameState.cash * 3) {
-    tips.push('Your debt-to-cash ratio is concerning. In real practice acquisitions, banks typically want to see the practice generating enough to cover loan payments within 12-18 months. Prioritize revenue growth over expansion.');
-  }
-
-  // Add top 2-3 tips to feedback
-  tips.slice(0, 3).forEach(tip => {
-    feedback.push({ area: 'Real-World Tip', type: 'tip', text: tip });
-  });
-
-  return feedback;
+  return feedback.slice(0, 10);
 }
 
 // Compare two challenge results and generate comparison insights
@@ -1612,11 +1591,28 @@ const STAFF_QUIRKS = [
   'Eats smelly food in break room', 'Decorates their workspace excessively',
 ];
 
+export const SPECIALIST_ROLES = ['Orthodontist', 'Periodontist', 'Endodontist', 'Oral Surgeon', 'Pediatric Dentist'];
+export function isProvider(member) { return member.role === 'Dentist' || SPECIALIST_ROLES.includes(member.role); }
+
 // ─── STAFF ───
 export const STAFF_TEMPLATES = [
   { role: 'Hygienist', baseSalary: 75000, skillRange: [40, 90], icon: '🧑‍⚕️', canSeePatients: true, patientsPerDay: 8 },
   { role: 'Dentist', baseSalary: 150000, skillRange: [50, 95], icon: '👨‍⚕️', canSeePatients: true, patientsPerDay: 10 },
-  { role: 'Specialist', baseSalary: 220000, skillRange: [65, 98], icon: '🏅', canSeePatients: true, patientsPerDay: 6 },
+  { role: 'Orthodontist', baseSalary: 280000, skillRange: [70, 98], icon: '🦷', canSeePatients: true, patientsPerDay: 8, isSpecialist: true,
+    specialty: 'Braces, Invisalign, bite correction. Long treatment plans = recurring revenue. Needs dedicated op space.',
+    feeScheduleSplit: 0.45, frictionChance: 0.15 },
+  { role: 'Periodontist', baseSalary: 240000, skillRange: [70, 98], icon: '🩺', canSeePatients: true, patientsPerDay: 6, isSpecialist: true,
+    specialty: 'Gum surgery, implants, deep cleanings. High-revenue procedures. Works closely with hygienists.',
+    feeScheduleSplit: 0.50, frictionChance: 0.10 },
+  { role: 'Endodontist', baseSalary: 260000, skillRange: [75, 98], icon: '🔬', canSeePatients: true, patientsPerDay: 5, isSpecialist: true,
+    specialty: 'Root canals and retreatments. Fast procedures, high per-case revenue. Saves teeth others would pull.',
+    feeScheduleSplit: 0.50, frictionChance: 0.08 },
+  { role: 'Oral Surgeon', baseSalary: 320000, skillRange: [75, 98], icon: '⚕️', canSeePatients: true, patientsPerDay: 4, isSpecialist: true,
+    specialty: 'Extractions, wisdom teeth, implant placement, biopsies. Highest per-case revenue but needs surgical suite.',
+    feeScheduleSplit: 0.45, frictionChance: 0.20 },
+  { role: 'Pediatric Dentist', baseSalary: 200000, skillRange: [65, 95], icon: '👶', canSeePatients: true, patientsPerDay: 10, isSpecialist: true,
+    specialty: 'Kids dentistry. High volume, lower per-case revenue but builds family loyalty. Great for Medicaid practices.',
+    feeScheduleSplit: 0.50, frictionChance: 0.05 },
   { role: 'Front Desk', baseSalary: 40000, skillRange: [30, 85], icon: '💁', canSeePatients: false },
   { role: 'Dental Assistant', baseSalary: 45000, skillRange: [35, 88], icon: '👩‍⚕️', canSeePatients: false },
   { role: 'Office Manager', baseSalary: 65000, skillRange: [40, 90], icon: '📋', canSeePatients: false },
@@ -1664,8 +1660,15 @@ export function generateStaffMember(template, options = {}) {
     daysEmployed: 0,
     assignedLocationId: options.locationId || null,
   };
+  // Specialist metadata
+  if (template.isSpecialist) {
+    member.isSpecialist = true;
+    member.specialty = template.specialty;
+    member.feeScheduleSplit = template.feeScheduleSplit || 0.50;
+    member.frictionChance = template.frictionChance || 0.10;
+  }
   // Associate tracking for hired dentists (not the owner)
-  if ((template.role === 'Dentist' || template.role === 'Specialist') && !options.isOwner) {
+  if ((template.role === 'Dentist' || template.isSpecialist || SPECIALIST_ROLES.includes(template.role)) && !options.isOwner) {
     member.isAssociate = true;
     member.loyalty = 65;
     member.production = 0;
@@ -1690,8 +1693,17 @@ export const PROCEDURES = [
   { id: 'root_canal', name: 'Root Canal', revenue: 1500, time: 2, frequency: 0.05, requiredRole: 'Dentist', icon: '🔧' },
   { id: 'extraction', name: 'Extraction', revenue: 300, time: 1, frequency: 0.08, requiredRole: 'Dentist', icon: '🔨' },
   { id: 'whitening', name: 'Whitening', revenue: 500, time: 1, frequency: 0.07, requiredEquipment: 'whitening_system', icon: '💎' },
-  { id: 'implant', name: 'Implant', revenue: 3000, time: 3, frequency: 0.03, requiredRole: 'Specialist', icon: '🏗️' },
-  { id: 'veneer', name: 'Veneer', revenue: 1800, time: 2, frequency: 0.02, requiredRole: 'Specialist', icon: '✨' },
+  { id: 'implant', name: 'Implant Placement', revenue: 3500, time: 3, frequency: 0.03, requiredRole: 'Oral Surgeon', icon: '🏗️' },
+  { id: 'veneer', name: 'Veneer', revenue: 1800, time: 2, frequency: 0.02, requiredRole: 'Dentist', icon: '✨' },
+  { id: 'ortho_consult', name: 'Ortho Consultation', revenue: 300, time: 1, frequency: 0.04, requiredRole: 'Orthodontist', icon: '🦷' },
+  { id: 'braces', name: 'Braces (Start)', revenue: 5500, time: 2, frequency: 0.02, requiredRole: 'Orthodontist', icon: '😁' },
+  { id: 'invisalign', name: 'Invisalign Case', revenue: 5000, time: 2, frequency: 0.02, requiredRole: 'Orthodontist', icon: '🔲' },
+  { id: 'perio_surgery', name: 'Gum Surgery', revenue: 2500, time: 2, frequency: 0.02, requiredRole: 'Periodontist', icon: '🩺' },
+  { id: 'deep_cleaning', name: 'Scaling & Root Planing', revenue: 800, time: 1, frequency: 0.05, requiredRole: 'Periodontist', icon: '🧹' },
+  { id: 'endo_retreat', name: 'Root Canal Retreatment', revenue: 2000, time: 2, frequency: 0.02, requiredRole: 'Endodontist', icon: '🔬' },
+  { id: 'wisdom_teeth', name: 'Wisdom Teeth Removal', revenue: 2800, time: 2, frequency: 0.03, requiredRole: 'Oral Surgeon', icon: '⚕️' },
+  { id: 'pedo_exam', name: 'Pediatric Exam & Cleaning', revenue: 200, time: 1, frequency: 0.06, requiredRole: 'Pediatric Dentist', icon: '👶' },
+  { id: 'sealants', name: 'Sealants (Pediatric)', revenue: 180, time: 1, frequency: 0.05, requiredRole: 'Pediatric Dentist', icon: '🛡️' },
 ];
 
 // ─── MARKETING ───
@@ -1749,11 +1761,13 @@ export const INSURANCE_PLANS = [
     noShowRate: 0.08, treatmentAcceptance: 0.75, emergencyRate: 0.10, staffDemand: 1.0,
     marginTip: 'Bread & butter — moderate fees, decent volume. Watch admin costs with multiple PPOs.',
     description: 'Low reimbursement. Pure volume play — dangerous for small practices.' },
-  { id: 'premier', name: 'Delta Premier (High-Tier)', reimbursementRate: 0.82, patientPool: 0.10, adminCost: 300, clawbackRisk: 0.01, icon: '💎',
+  { id: 'premier', name: 'Delta Dental Premier', reimbursementRate: 0.88, patientPool: 0.10, adminCost: 300, clawbackRisk: 0.01, icon: '💎',
     type: 'premium_ppo', minReputation: 4.0, cashCannibalization: 0.20,
     noShowRate: 0.03, treatmentAcceptance: 0.90, emergencyRate: 0.05, staffDemand: 0.9,
-    marginTip: 'Highest margins in insurance. Protect your reputation to keep credentialing.',
-    description: 'Premium PPO tier. Best reimbursement but REQUIRES 4.0+ stars. Fewer patients but they pay near-cash rates. Competitive to get.' },
+    grandfathered: true, // ONLY available to older/established docs — new dentists CANNOT credential for this
+    acquireReimbursementDrop: 0.25, // buyer loses ~25% of the fee schedule when they take over
+    marginTip: 'GRANDFATHERED — only older docs have this. If you acquire a practice with Premier, YOUR fee schedule drops ~25%. The patients stay but they pay YOU less.',
+    description: 'The gold standard — highest PPO reimbursement in dentistry. But it\'s GRANDFATHERED. Only established dentists who\'ve had it for years keep the fee schedule. New owners/dentists cannot credential for Premier. If you buy a practice heavy on Premier patients, those patients stay but your reimbursement drops to regular Delta PPO rates. Major acquisition red flag.' },
   { id: 'united_hmo', name: 'United Healthcare HMO', reimbursementRate: 0.45, patientPool: 0.30, adminCost: 700, clawbackRisk: 0.04, icon: '🔴',
     type: 'hmo', minReputation: 0, cashCannibalization: 0.05,
     noShowRate: 0.12, treatmentAcceptance: 0.55, emergencyRate: 0.25, staffDemand: 1.3,
@@ -1777,6 +1791,17 @@ export const INSURANCE_PLANS = [
     noShowRate: 0.02, treatmentAcceptance: 0.95, emergencyRate: 0.05, staffDemand: 0.8,
     marginTip: 'Maximum margin per patient. No admin, no clawbacks. Earned through reputation.',
     description: 'THE DREAM. Full fees, zero admin, zero clawbacks. But patients are picky — they want clean offices, great reviews, and a premium experience. Grows with reputation.' },
+];
+
+// Common procedure fee schedule — what each plan type ACTUALLY pays for the same work
+// This is the core economics lesson: same overhead, same chair time, wildly different revenue
+export const FEE_SCHEDULE_EXAMPLES = [
+  { procedure: 'Adult Prophy (Cleaning)', code: 'D1110', cashFee: 175, ppoRate: 0.70, premierRate: 0.88, hmoRate: 0.40, medicaidRate: 0.30 },
+  { procedure: 'Composite Filling (1 surf)', code: 'D2391', cashFee: 250, ppoRate: 0.68, premierRate: 0.85, hmoRate: 0.38, medicaidRate: 0.28 },
+  { procedure: 'Crown (PFM)', code: 'D2750', cashFee: 1200, ppoRate: 0.65, premierRate: 0.82, hmoRate: 0.35, medicaidRate: 0.25 },
+  { procedure: 'Root Canal (Anterior)', code: 'D3310', cashFee: 900, ppoRate: 0.62, premierRate: 0.80, hmoRate: 0.36, medicaidRate: 0.27 },
+  { procedure: 'Extraction (Simple)', code: 'D7140', cashFee: 250, ppoRate: 0.70, premierRate: 0.85, hmoRate: 0.42, medicaidRate: 0.32 },
+  { procedure: 'Comprehensive Exam', code: 'D0150', cashFee: 125, ppoRate: 0.72, premierRate: 0.90, hmoRate: 0.45, medicaidRate: 0.35 },
 ];
 
 // Calculate the "practice style" based on insurance mix
@@ -2038,12 +2063,17 @@ function generatePracticeEquipment(sqft, problems, ops) {
   return equip;
 }
 
-function generatePracticeInsurances(problems) {
+function generatePracticeInsurances(problems, isOlderPractice) {
   const mess = problems.includes('insurance_mess');
   if (mess) return ['delta', 'cigna', 'aetna', 'united_hmo', 'dhmo'];
   const base = ['delta'];
   if (Math.random() > 0.4) base.push('cigna');
   if (Math.random() > 0.6) base.push('metlife');
+  // Older/established practices may have grandfathered Delta Premier
+  // This is a RED FLAG for buyers — the fee schedule drops ~25% under new ownership
+  if (isOlderPractice && Math.random() > 0.4) {
+    base.push('premier');
+  }
   return base;
 }
 
@@ -2135,7 +2165,7 @@ export function generateAcquisitionOptions(difficulty) {
       equipment: generatePracticeEquipment(sqft, problems, actualOps),
       builtOutRooms: generateBuiltRooms(sqft, actualOps),
       staff: generatePracticeStaff(staffCount, problems),
-      insurances: generatePracticeInsurances(problems),
+      insurances: generatePracticeInsurances(problems, diffId !== 'beginner' && patients > 150),
       relationships: {
         supply_rep: randInt(30, 65),
         equipment_tech: randInt(25, 60),
@@ -2226,7 +2256,8 @@ export function calculatePressures(gameState, stats) {
 
 // ─── GAME CALCULATIONS ───
 export function calculateDailyStats(gameState) {
-  const { equipment, staff, reputation, patients, activeMarketing, acceptedInsurance, officeUpgrades, relationships, cleanliness, builtOutRooms, sqft } = gameState;
+  if (!gameState) return { dailyRevenue: 0, totalDailyCosts: 0, dailyProfit: 0, actualPatients: 0 };
+  const { equipment = [], staff = [], reputation = 3, patients = 0, activeMarketing = [], acceptedInsurance = [], officeUpgrades = [], relationships = {}, cleanliness = 50, builtOutRooms = [], sqft = 0 } = gameState;
 
   // Capacity from chairs (limited by built operatories)
   const builtOps = (builtOutRooms || []).filter(r => r === 'basic_ops' || r === 'premium_ops').length;
@@ -2371,9 +2402,11 @@ export function calculateDailyStats(gameState) {
   const patientsAfterNoShows = Math.round(actualPatients * (1 - blendedNoShowRate));
 
   // 2. Treatment acceptance — lower acceptance = less elective revenue
-  const blendedTreatmentAcceptance = allAcceptedPlans.length > 0
+  // Training bonus from case acceptance / verbal skills programs stacks on top
+  const trainingAcceptanceBonus = gameState.treatmentAcceptanceBonus || 0;
+  const blendedTreatmentAcceptance = Math.min(0.98, (allAcceptedPlans.length > 0
     ? allAcceptedPlans.reduce((s, p) => s + (p.treatmentAcceptance || 0.85) * p.patientPool, 0) / totalPool
-    : 0.85;
+    : 0.85) + trainingAcceptanceBonus);
   const acceptanceMultiplier = 0.6 + (blendedTreatmentAcceptance * 0.4); // floor 0.6x
 
   // 3. Staff demand check — HMO volume needs more staff or satisfaction drops
@@ -2442,7 +2475,6 @@ export function calculateDailyStats(gameState) {
   const supplyRelationship = (relationships || {}).supply_rep || 50;
   const baseSupplyMultiplier = supplyRelationship > 70 ? 0.75 : supplyRelationship > 50 ? 0.9 : supplyRelationship < 25 ? 1.4 : supplyRelationship < 40 ? 1.2 : 1.0;
   // Supply creep: costs drift up ~1% per month if supply relationship is below 50 (nobody is watching)
-  const gameDay = gameState.day || 1;
   const supplyCreep = supplyRelationship < 50 ? 1 + (Math.floor(gameDay / 30) * 0.015) : 1.0;
   const supplyPerPatient = 18; // $18/patient/day in consumables (gloves, bibs, impression material, composites, anesthetic, etc.)
   const dailySupplies = Math.round(actualPatients * supplyPerPatient * baseSupplyMultiplier * supplyCreep);

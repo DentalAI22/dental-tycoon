@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, Fragment } from 'react'
+import React, { useState, useEffect, useCallback, useRef, Fragment, Component } from 'react'
 import {
   EQUIPMENT, STAFF_TEMPLATES, ACQUISITION_OPTIONS, MARKETING_OPTIONS,
   INSURANCE_PLANS, OFFICE_UPGRADES, RANDOM_EVENTS, PROCEDURES,
@@ -9,7 +9,7 @@ import {
   CONSULTANTS, checkConsultantRequirements,
   getLeaderboard, saveToLeaderboard, getLeaderboardByMode, getLeaderboardModes, getPracticeStyle,
   generateChallengeCode, codeToSeed, generateChallengeSchedule, generateChallengeCandidates,
-  saveChallenge, getChallengeResults, generateSeasonFeedback, compareChallengeResults,
+  saveChallenge, getChallengeResults, getAllChallenges, generateSeasonFeedback, compareChallengeResults,
   HELL_EVENTS, KEY_DECISIONS,
   MONTHLY_LOAN_PAYMENT_RATE, LATE_PAYMENT_PENALTY_RATE, LOAN_WARNING_DAYS,
   INSURANCE_REIMBURSEMENT_DELAY, CREDENTIALING_DAYS,
@@ -19,8 +19,35 @@ import {
   calculateAllLocationStats, MULTI_LOCATION_EVENTS,
   updateAssociateLoyalty, computeFlightRisk, associateDeparture,
   generateAcquisitionOptions, PROBLEM_POOL,
-  getStaffingRecommendation,
+  getStaffingRecommendation, FEE_SCHEDULE_EXAMPLES,
+  SPECIALIST_ROLES, isProvider,
 } from './gameData'
+
+// ═══════════════════════════════════════════════════════
+// ERROR BOUNDARY — catches render crashes and shows fallback
+// ═══════════════════════════════════════════════════════
+class GameErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  componentDidCatch(error, info) { console.error('Game render crash:', error, info); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="game-over" style={{ textAlign: 'center', padding: '40px 20px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '10px' }}>⚠️</div>
+          <h1 style={{ color: '#eab308' }}>Something Went Wrong</h1>
+          <p style={{ color: '#94a3b8', marginBottom: '20px' }}>The game encountered an error. Your progress has been saved to the leaderboard.</p>
+          <p style={{ color: '#64748b', fontSize: '11px', marginBottom: '20px' }}>{this.state.error?.message}</p>
+          <button className="start-btn" onClick={() => window.location.reload()} style={{ margin: '0 auto' }}>
+            <span className="btn-icon">🔄</span>
+            <div><div className="btn-title">Restart Game</div></div>
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 // ═══════════════════════════════════════════════════════
 // TITLE SCREEN
@@ -61,13 +88,22 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard }) {
             <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#eab308', color: '#0a1628', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>COMPETE</span>
           </button>
 
-          {/* Leaderboard */}
-          <button className="start-btn" onClick={() => onLeaderboard()} style={{ borderColor: '#a78bfa', background: 'rgba(167,139,250,0.06)' }}>
-            <span className="btn-icon">🏆</span>
+          {/* Leaderboard — with inline top score preview */}
+          <button className="start-btn" onClick={() => onLeaderboard()} style={{ borderColor: '#a78bfa', background: 'rgba(167,139,250,0.08)', position: 'relative' }}>
+            <span className="btn-icon">📊</span>
             <div>
               <div className="btn-title" style={{ color: '#a78bfa' }}>Leaderboard</div>
-              <div className="btn-desc">See today's top scores, this week's leaders, and the all-time best. Can you claim #1?</div>
+              <div className="btn-desc">
+                {(() => {
+                  const board = getLeaderboard();
+                  if (board.length === 0) return 'No scores yet — be the first to claim #1!';
+                  return `Top score: ${board[0].overallScore}/1000 (${board[0].overallGrade}) · ${board.length} game${board.length !== 1 ? 's' : ''} played`;
+                })()}
+              </div>
             </div>
+            <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#a78bfa', color: '#0a1628', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>
+              {getLeaderboard().length || 0}
+            </span>
           </button>
         </div>
 
@@ -77,6 +113,14 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard }) {
           <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
             Complete a season and receive detailed feedback on your management decisions — overhead control, staffing, insurance strategy, patient growth, and real-world dental practice tips you can actually use.
           </div>
+        </div>
+
+        {/* Feedback link */}
+        <div style={{ marginTop: '16px', textAlign: 'center' }}>
+          <a href="mailto:feedback@dentaltycoon.com?subject=Dental%20Tycoon%20Feedback&body=Hey%20-%20I%20have%20some%20feedback%20on%20Dental%20Tycoon%3A%0A%0A"
+            style={{ fontSize: '12px', color: '#64748b', textDecoration: 'none', borderBottom: '1px solid rgba(100,116,139,0.3)', paddingBottom: '1px' }}>
+            Have feedback? Drop us a note
+          </a>
         </div>
       </div>
     </div>
@@ -279,12 +323,13 @@ function DifficultySelectionScreen({ onSelect, onBack, startMode }) {
 }
 
 // ═══════════════════════════════════════════════════════
-// CHALLENGE SETUP SCREEN
+// CHALLENGE SETUP SCREEN (1v1 + Group Tournament)
 // ═══════════════════════════════════════════════════════
 function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
-  const [mode, setMode] = useState(null); // 'create' | 'join'
+  const [mode, setMode] = useState(null); // 'create' | 'join' | 'view'
   const [playerName, setPlayerName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+  const [viewCode, setViewCode] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState(DIFFICULTY_MODES[1]);
 
   const handleCreate = () => {
@@ -297,44 +342,132 @@ function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
     onJoinChallenge({ code: joinCode.toUpperCase(), playerName: playerName || 'Player 2', difficulty: selectedDifficulty });
   };
 
+  // View tournament standings for a code
+  if (mode === 'view') {
+    const results = viewCode.length >= 4 ? getChallengeResults(viewCode.toUpperCase()) : [];
+    const sorted = [...results].sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+    const gradeColor = (grade) => {
+      if (!grade) return '#94a3b8';
+      if (grade.startsWith('A')) return '#22c55e';
+      if (grade.startsWith('B')) return '#3b82f6';
+      if (grade.startsWith('C')) return '#eab308';
+      if (grade.startsWith('D')) return '#f97316';
+      return '#ef4444';
+    };
+    return (
+      <div className="acquire-screen" style={{ maxWidth: '600px' }}>
+        <h2 className="acquire-title">Tournament Standings</h2>
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>Challenge Code</label>
+          <input type="text" value={viewCode} onChange={e => setViewCode(e.target.value.toUpperCase())}
+            placeholder="Enter code to view..." maxLength={6}
+            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #334155', background: '#1e293b', color: '#eab308', fontSize: '20px', fontFamily: 'monospace', textAlign: 'center', letterSpacing: '4px' }}
+          />
+        </div>
+        {sorted.length > 0 ? (
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                {sorted.length} player{sorted.length !== 1 ? 's' : ''} competing
+              </div>
+            </div>
+            {sorted.map((entry, i) => (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', marginBottom: '6px',
+                background: i === 0 ? 'rgba(234,179,8,0.1)' : i === 1 ? 'rgba(192,192,192,0.06)' : i === 2 ? 'rgba(205,127,50,0.06)' : 'rgba(30,41,59,0.4)',
+                border: `1px solid ${i === 0 ? 'rgba(234,179,8,0.3)' : i === 1 ? 'rgba(192,192,192,0.2)' : i === 2 ? 'rgba(205,127,50,0.2)' : 'rgba(148,163,184,0.08)'}`,
+                borderRadius: '10px',
+              }}>
+                <div style={{ fontSize: i < 3 ? '20px' : '14px', fontWeight: 'bold', color: i === 0 ? '#eab308' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#64748b', minWidth: '30px', textAlign: 'center' }}>
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                </div>
+                <div style={{ minWidth: '55px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '18px', fontFamily: 'Fredoka One', color: gradeColor(entry.overallGrade) }}>{entry.overallScore || 0}</div>
+                  <div style={{ fontSize: '10px', color: gradeColor(entry.overallGrade), fontWeight: 'bold' }}>{entry.overallGrade || '—'}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', color: '#e2e8f0', fontWeight: 600 }}>{entry.playerName || 'Anonymous'}</div>
+                  <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <span>${(entry.finalCash || 0).toLocaleString()}</span>
+                    <span>{entry.finalPatients || entry.patients || 0} pts</span>
+                    <span>{entry.finalReputation ? Number(entry.finalReputation).toFixed(1) : '?'}⭐</span>
+                    <span>{entry.outcome === 'Bankrupt' ? '💀' : '✅'}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {sorted.length >= 2 && (
+              <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: '#64748b' }}>
+                  Score spread: {sorted[sorted.length - 1].overallScore || 0} — {sorted[0].overallScore || 0} ({(sorted[0].overallScore || 0) - (sorted[sorted.length - 1].overallScore || 0)} point gap)
+                </div>
+              </div>
+            )}
+          </div>
+        ) : viewCode.length >= 4 ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>
+            <div style={{ fontSize: '2rem', marginBottom: '8px' }}>🏟️</div>
+            <div>No results for this code yet</div>
+            <div style={{ fontSize: '11px', marginTop: '4px' }}>Join the challenge and be the first to compete!</div>
+          </div>
+        ) : null}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
+          <button className="back-btn" onClick={() => setMode(null)}>Back</button>
+          {viewCode.length >= 4 && (
+            <button className="start-btn" style={{ flex: 1 }} onClick={() => { setJoinCode(viewCode); setMode('join'); }}>
+              <span className="btn-icon">🎮</span>
+              <div><div className="btn-title">Join This Challenge</div></div>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (!mode) {
+    const allChallenges = Object.keys(getAllChallenges());
     return (
       <div className="acquire-screen">
         <h2 className="acquire-title">Challenge Mode</h2>
-        <p className="acquire-sub">Play the same season as a friend. Same events, same candidates, same market. Different decisions. Who runs the better practice?</p>
+        <p className="acquire-sub">Play the same season as friends. Same events, same candidates, same market — different decisions. Share a code with 2, 10, or 30 people and see who runs the best practice.</p>
         <div className="practice-list">
-          <div className="practice-card" onClick={() => setMode('create')}>
+          <div className="practice-card" onClick={() => setMode('create')} style={{ borderLeft: '3px solid #eab308' }}>
             <h3 className="practice-name">Start a Challenge</h3>
-            <p className="practice-desc">Generate a challenge code and share it with a friend. You play first, then they play the same season.</p>
+            <p className="practice-desc">Generate a unique code. Share it with 1 friend or 30 — everyone plays the exact same season. Compare on a live leaderboard.</p>
           </div>
-          <div className="practice-card" onClick={() => setMode('join')}>
+          <div className="practice-card" onClick={() => setMode('join')} style={{ borderLeft: '3px solid #3b82f6' }}>
             <h3 className="practice-name">Join a Challenge</h3>
-            <p className="practice-desc">Enter a friend's challenge code to play their exact same season. Compare results when you're done.</p>
+            <p className="practice-desc">Enter a friend's code to play their season. Your score gets added to the group standings.</p>
+          </div>
+          <div className="practice-card" onClick={() => setMode('view')} style={{ borderLeft: '3px solid #a78bfa' }}>
+            <h3 className="practice-name">View Tournament</h3>
+            <p className="practice-desc">Check standings for any challenge code. See who's winning, score spreads, and how everyone performed.</p>
           </div>
         </div>
-        {/* Show existing challenge results */}
-        {(() => {
-          const existingResults = getChallengeResults('__check__'); // just to check if any exist
-          const allChallenges = Object.keys(JSON.parse(localStorage.getItem('dental_tycoon_challenges') || '{}'));
-          if (allChallenges.length === 0) return null;
-          return (
-            <div style={{ marginTop: '15px' }}>
-              <h3 style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '8px' }}>Recent Challenges</h3>
-              {allChallenges.slice(0, 5).map(code => {
-                const results = getChallengeResults(code);
-                return (
-                  <div key={code} style={{ padding: '8px', background: 'rgba(30,41,59,0.4)', borderRadius: '6px', marginBottom: '6px', fontSize: '12px' }}>
-                    <span style={{ color: '#eab308', fontFamily: 'monospace', fontWeight: 'bold' }}>{code}</span>
-                    <span style={{ color: '#64748b', marginLeft: '8px' }}>{results.length} player{results.length !== 1 ? 's' : ''}</span>
-                    {results.map((r, i) => (
-                      <span key={i} style={{ color: '#94a3b8', marginLeft: '8px' }}>{r.playerName}: {r.overallGrade}</span>
-                    ))}
+        {/* Show existing tournaments */}
+        {allChallenges.length > 0 && (
+          <div style={{ marginTop: '15px' }}>
+            <h3 style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '8px' }}>Your Tournaments</h3>
+            {allChallenges.slice(0, 8).map(code => {
+              const results = getChallengeResults(code);
+              const sorted = [...results].sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+              const topPlayer = sorted[0];
+              return (
+                <div key={code} onClick={() => { setViewCode(code); setMode('view'); }}
+                  style={{ padding: '10px 12px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', marginBottom: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px', border: '1px solid rgba(148,163,184,0.08)' }}>
+                  <div style={{ fontFamily: 'monospace', color: '#eab308', fontWeight: 'bold', fontSize: '14px', letterSpacing: '2px' }}>{code}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', color: '#e2e8f0' }}>
+                      {results.length} player{results.length !== 1 ? 's' : ''}
+                      {topPlayer && <span style={{ color: '#64748b' }}> · Leader: {topPlayer.playerName} ({topPlayer.overallScore || '?'}pts)</span>}
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          );
-        })()}
+                  <span style={{ fontSize: '12px', color: '#475569' }}>→</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
         <button className="back-btn" onClick={onBack}>Back</button>
       </div>
     );
@@ -343,6 +476,11 @@ function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
   return (
     <div className="acquire-screen">
       <h2 className="acquire-title">{mode === 'create' ? 'Start a Challenge' : 'Join a Challenge'}</h2>
+      <p className="acquire-sub" style={{ marginBottom: '15px' }}>
+        {mode === 'create'
+          ? 'Share the generated code with anyone — friends, coworkers, your study group. Everyone plays the same season.'
+          : 'Enter the challenge code to play the same season as the group.'}
+      </p>
 
       {/* Player name */}
       <div style={{ marginBottom: '15px' }}>
@@ -369,7 +507,7 @@ function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
             if (existing.length > 0) {
               return (
                 <div style={{ marginTop: '6px', fontSize: '11px', color: '#22c55e' }}>
-                  Found! {existing.length} player{existing.length !== 1 ? 's' : ''} already played: {existing.map(r => r.playerName).join(', ')}
+                  Found! {existing.length} player{existing.length !== 1 ? 's' : ''} competing: {existing.slice(0, 5).map(r => r.playerName).join(', ')}{existing.length > 5 ? ` +${existing.length - 5} more` : ''}
                 </div>
               );
             }
@@ -403,7 +541,7 @@ function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
           <span className="btn-icon">{mode === 'create' ? '🎲' : '🏆'}</span>
           <div>
             <div className="btn-title">{mode === 'create' ? 'Generate & Play' : 'Join & Play'}</div>
-            <div className="btn-desc">{mode === 'create' ? 'Creates a code you can share' : `Play challenge ${joinCode}`}</div>
+            <div className="btn-desc">{mode === 'create' ? 'Creates a shareable code' : `Play challenge ${joinCode}`}</div>
           </div>
         </button>
       </div>
@@ -412,27 +550,78 @@ function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
 }
 
 // ═══════════════════════════════════════════════════════
-// CHALLENGE COMPARE SCREEN
+// CHALLENGE COMPARE / TOURNAMENT SCREEN
 // ═══════════════════════════════════════════════════════
 function ChallengeCompareScreen({ challengeCode, myResult, onBack }) {
   const allResults = getChallengeResults(challengeCode);
+  const sorted = [...allResults].sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+  const myRank = sorted.findIndex(r => r.playerName === myResult.playerName && r.date === myResult.date) + 1;
   const otherResults = allResults.filter(r => r.playerName !== myResult.playerName || r.date !== myResult.date);
+  const isGroupTournament = allResults.length >= 3;
+
+  const gradeColor = (grade) => {
+    if (!grade) return '#94a3b8';
+    if (grade.startsWith('A')) return '#22c55e';
+    if (grade.startsWith('B')) return '#3b82f6';
+    if (grade.startsWith('C')) return '#eab308';
+    if (grade.startsWith('D')) return '#f97316';
+    return '#ef4444';
+  };
 
   return (
     <div className="acquire-screen" style={{ maxWidth: '700px' }}>
-      <h2 className="acquire-title">Challenge Results</h2>
+      <h2 className="acquire-title">{isGroupTournament ? 'Tournament Results' : 'Challenge Results'}</h2>
       <div style={{ textAlign: 'center', marginBottom: '15px' }}>
         <div style={{ fontSize: '24px', fontFamily: 'monospace', color: '#eab308', fontWeight: 'bold', letterSpacing: '4px' }}>{challengeCode}</div>
-        <div style={{ fontSize: '12px', color: '#64748b' }}>Share this code with friends to play the same season!</div>
+        <div style={{ fontSize: '12px', color: '#64748b' }}>
+          {allResults.length} player{allResults.length !== 1 ? 's' : ''} competing
+          {myRank > 0 && <span> · You are <strong style={{ color: myRank <= 3 ? '#eab308' : '#e2e8f0' }}>#{myRank}</strong></span>}
+        </div>
       </div>
 
-      {/* My result */}
-      <div style={{ padding: '12px', background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '8px', marginBottom: '10px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#eab308' }}>{myResult.playerName} (You)</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', marginTop: '8px' }}>
+      {/* Group Tournament Leaderboard (3+ players) */}
+      {isGroupTournament && (
+        <div style={{ marginBottom: '16px' }}>
+          <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '8px', textAlign: 'center' }}>Tournament Standings</h3>
+          {sorted.map((entry, i) => {
+            const isMe = entry.playerName === myResult.playerName && entry.date === myResult.date;
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', marginBottom: '5px',
+                background: isMe ? 'rgba(234,179,8,0.12)' : i === 0 ? 'rgba(234,179,8,0.06)' : 'rgba(30,41,59,0.4)',
+                border: `1px solid ${isMe ? 'rgba(234,179,8,0.4)' : i === 0 ? 'rgba(234,179,8,0.2)' : 'rgba(148,163,184,0.08)'}`,
+                borderRadius: '10px',
+              }}>
+                <div style={{ fontSize: i < 3 ? '18px' : '13px', fontWeight: 'bold', color: i === 0 ? '#eab308' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#64748b', minWidth: '28px', textAlign: 'center' }}>
+                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                </div>
+                <div style={{ minWidth: '50px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '16px', fontFamily: 'Fredoka One', color: gradeColor(entry.overallGrade) }}>{entry.overallScore || 0}</div>
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>
+                    {entry.playerName || 'Anonymous'} {isMe && <span style={{ fontSize: '10px', color: '#eab308' }}>(You)</span>}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748b', display: 'flex', gap: '6px' }}>
+                    <span>{entry.overallGrade}</span>
+                    <span>${(entry.finalCash || 0).toLocaleString()}</span>
+                    <span>{entry.finalPatients || 0} pts</span>
+                    <span>{entry.outcome === 'Bankrupt' ? '💀' : '✅'}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* My result card */}
+      <div style={{ padding: '12px', background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '10px', marginBottom: '12px' }}>
+        <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#eab308', marginBottom: '6px' }}>{myResult.playerName} (You){myRank > 0 ? ` — #${myRank}` : ''}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: myResult.overallScore >= 70 ? '#22c55e' : myResult.overallScore >= 50 ? '#eab308' : '#ef4444' }}>{myResult.overallGrade}</div>
-            <div style={{ fontSize: '10px', color: '#64748b' }}>Grade</div>
+            <div style={{ fontSize: '22px', fontWeight: 'bold', fontFamily: 'Fredoka One', color: gradeColor(myResult.overallGrade) }}>{myResult.overallGrade}</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>{myResult.overallScore || '?'}/1000</div>
           </div>
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '14px', color: '#e2e8f0' }}>${(myResult.finalCash || 0).toLocaleString()}</div>
@@ -443,57 +632,42 @@ function ChallengeCompareScreen({ challengeCode, myResult, onBack }) {
             <div style={{ fontSize: '10px', color: '#64748b' }}>Patients</div>
           </div>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '14px', color: '#e2e8f0' }}>{(myResult.finalReputation || 0).toFixed(1)}</div>
+            <div style={{ fontSize: '14px', color: '#e2e8f0' }}>{Number(myResult.finalReputation || 0).toFixed(1)}</div>
             <div style={{ fontSize: '10px', color: '#64748b' }}>Stars</div>
           </div>
         </div>
       </div>
 
-      {/* Season feedback for the player */}
-      {myResult.feedback && myResult.feedback.length > 0 && (
-        <div style={{ marginBottom: '15px' }}>
-          <h3 style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '6px' }}>Your Season Report</h3>
-          {myResult.feedback.map((fb, i) => (
-            <div key={i} style={{ padding: '8px', marginBottom: '4px', background: 'rgba(30,41,59,0.4)', borderRadius: '6px', borderLeft: `3px solid ${fb.type === 'strength' ? '#22c55e' : fb.type === 'weakness' ? '#ef4444' : '#eab308'}` }}>
-              <div style={{ fontSize: '12px', fontWeight: 'bold', color: fb.type === 'strength' ? '#22c55e' : fb.type === 'weakness' ? '#ef4444' : '#eab308' }}>
-                {fb.area} — {fb.grade}
-              </div>
-              <div style={{ fontSize: '11px', color: '#94a3b8' }}>{fb.text}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Comparison with others */}
-      {otherResults.length > 0 ? (
+      {/* 1v1 Comparison (show for 2 players, or top comparisons for groups) */}
+      {otherResults.length > 0 && (
         <div>
-          <h3 style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '6px' }}>Head-to-Head Comparison</h3>
-          {otherResults.map((other, idx) => {
+          <h3 style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '8px' }}>{isGroupTournament ? 'Your Best Head-to-Head' : 'Head-to-Head'}</h3>
+          {(isGroupTournament ? otherResults.slice(0, 2) : otherResults).map((other, idx) => {
             const comparisons = compareChallengeResults(myResult, other);
             return (
-              <div key={idx} style={{ marginBottom: '15px' }}>
-                <div style={{ fontSize: '13px', color: '#e2e8f0', marginBottom: '8px', fontWeight: 'bold' }}>
+              <div key={idx} style={{ marginBottom: '12px', padding: '10px', background: 'rgba(30,41,59,0.3)', borderRadius: '8px' }}>
+                <div style={{ fontSize: '12px', color: '#e2e8f0', marginBottom: '6px', fontWeight: 'bold', textAlign: 'center' }}>
                   {myResult.playerName} vs {other.playerName}
                 </div>
                 {comparisons.map((comp, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '6px 8px', background: 'rgba(30,41,59,0.3)', borderRadius: '4px', marginBottom: '3px', fontSize: '12px' }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '4px 6px', background: 'rgba(15,23,42,0.3)', borderRadius: '4px', marginBottom: '2px', fontSize: '12px' }}>
                     <div style={{ flex: 1, color: comp.winner === 1 ? '#22c55e' : '#94a3b8', textAlign: 'right' }}>
                       {comp.format === 'currency' ? `$${(comp.p1 || 0).toLocaleString()}` :
                        comp.format === 'percent_lower_better' ? `${comp.p1}%` :
-                       comp.format === 'stars' ? `${(comp.p1 || 0).toFixed(1)}` :
+                       comp.format === 'stars' ? `${Number(comp.p1 || 0).toFixed(1)}` :
                        comp.p1}
                     </div>
-                    <div style={{ width: '120px', textAlign: 'center', color: '#64748b', fontSize: '10px' }}>{comp.category}</div>
+                    <div style={{ width: '110px', textAlign: 'center', color: '#64748b', fontSize: '10px' }}>{comp.category}</div>
                     <div style={{ flex: 1, color: comp.winner === 2 ? '#22c55e' : '#94a3b8' }}>
                       {comp.format === 'currency' ? `$${(comp.p2 || 0).toLocaleString()}` :
                        comp.format === 'percent_lower_better' ? `${comp.p2}%` :
-                       comp.format === 'stars' ? `${(comp.p2 || 0).toFixed(1)}` :
+                       comp.format === 'stars' ? `${Number(comp.p2 || 0).toFixed(1)}` :
                        comp.p2}
                     </div>
                   </div>
                 ))}
-                {comparisons.filter(c => c.insight).map((comp, i) => (
-                  <div key={`insight-${i}`} style={{ fontSize: '10px', color: '#64748b', fontStyle: 'italic', marginTop: '2px', marginBottom: '4px', paddingLeft: '8px' }}>
+                {comparisons.filter(c => c.insight).slice(0, 2).map((comp, i) => (
+                  <div key={`insight-${i}`} style={{ fontSize: '10px', color: '#64748b', fontStyle: 'italic', marginTop: '3px', paddingLeft: '8px' }}>
                     {comp.insight}
                   </div>
                 ))}
@@ -501,10 +675,12 @@ function ChallengeCompareScreen({ challengeCode, myResult, onBack }) {
             );
           })}
         </div>
-      ) : (
-        <div style={{ padding: '15px', background: 'rgba(234,179,8,0.1)', borderRadius: '8px', textAlign: 'center' }}>
+      )}
+
+      {otherResults.length === 0 && (
+        <div style={{ padding: '16px', background: 'rgba(234,179,8,0.08)', borderRadius: '10px', textAlign: 'center' }}>
           <div style={{ fontSize: '14px', color: '#eab308', marginBottom: '4px' }}>Waiting for challengers!</div>
-          <div style={{ fontSize: '12px', color: '#94a3b8' }}>Share the code <strong style={{ color: '#eab308', fontFamily: 'monospace' }}>{challengeCode}</strong> with a friend. When they complete the same season, come back here to compare.</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8' }}>Share <strong style={{ color: '#eab308', fontFamily: 'monospace', letterSpacing: '2px' }}>{challengeCode}</strong> with friends. Everyone who plays gets ranked on the tournament board.</div>
         </div>
       )}
 
@@ -695,7 +871,7 @@ function getCoachTip(phase, state) {
       const def = EQUIPMENT.find(e => e.id === eq);
       return def && def.patientsPerDay > 0;
     }).length;
-    const dentistCount = staff.filter(s => s.role === 'Dentist' || s.role === 'Specialist').length;
+    const dentistCount = staff.filter(s => isProvider(s)).length;
     const hygienistCount = staff.filter(s => s.role === 'Hygienist').length;
     const assistantCount = staff.filter(s => s.role === 'Dental Assistant').length;
 
@@ -1096,7 +1272,7 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
     const def = EQUIPMENT.find(e => e.id === eq);
     return def && def.patientsPerDay > 0;
   });
-  const hasDentist = staff.some(s => s.role === 'Dentist' || s.role === 'Specialist');
+  const hasDentist = staff.some(s => isProvider(s));
   const hasFrontDesk = staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
   const hasAnyMarketing = marketing.length > 0;
   const hasCompressor = equipment.includes('compressor');
@@ -1266,7 +1442,7 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
             )}
             <h4 className="mgmt-subtitle">Candidates</h4>
             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
-              {['all', 'Dentist', 'Hygienist', 'Dental Assistant', 'Front Desk', 'Office Manager', 'Specialist'].map(r => (
+              {['all', 'Dentist', 'Hygienist', 'Dental Assistant', 'Front Desk', 'Office Manager', 'Specialists'].map(r => (
                 <button key={r} onClick={() => setRoleFilter(r)} style={{
                   fontSize: '10px', padding: '3px 8px', borderRadius: '12px', border: 'none', cursor: 'pointer',
                   background: roleFilter === r ? 'rgba(59,130,246,0.3)' : 'rgba(30,41,59,0.5)',
@@ -1275,7 +1451,7 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
               ))}
             </div>
             <div className="candidates">
-              {candidates.filter(c => roleFilter === 'all' || c.role === roleFilter).map(c => (
+              {candidates.filter(c => roleFilter === 'all' || c.role === roleFilter || (roleFilter === 'Specialists' && SPECIALIST_ROLES.includes(c.role))).map(c => (
                 <div key={c.id} style={{ padding: '10px', marginBottom: '6px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', border: '1px solid rgba(100,116,139,0.2)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
                     <div>
@@ -1298,6 +1474,14 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
                       </div>
                     ))}
                   </div>
+                  {c.isSpecialist && (
+                    <div style={{ fontSize: '10px', padding: '4px 6px', marginBottom: '4px', background: 'rgba(168,85,247,0.1)', borderRadius: '4px', borderLeft: '2px solid #a855f7' }}>
+                      <div style={{ color: '#c084fc', fontWeight: 600 }}>Specialist: {c.role}</div>
+                      <div style={{ color: '#94a3b8' }}>{c.specialty}</div>
+                      <div style={{ color: '#eab308' }}>Fee split: You keep {Math.round((1 - c.feeScheduleSplit) * 100)}% of their production</div>
+                      {c.frictionChance > 0.10 && <div style={{ color: '#ef4444' }}>High friction risk — may cause staff conflicts</div>}
+                    </div>
+                  )}
                   <div style={{ fontSize: '10px', lineHeight: '1.5' }}>
                     {c.strength && <div style={{ color: '#4ade80' }}>{'+ '}{c.strength}</div>}
                     {c.weakness && <div style={{ color: '#fbbf24' }}>{'- '}{c.weakness}</div>}
@@ -1473,6 +1657,11 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
             {option.attritionHit > 0 && (
               <div style={{ marginTop: '6px', fontSize: '11px', color: '#eab308', fontWeight: 600 }}>
                 ⚠ ~{option.attritionHit} patients expected to leave during ownership transition
+              </div>
+            )}
+            {option.insurances?.includes('premier') && (
+              <div style={{ marginTop: '6px', padding: '6px 8px', fontSize: '11px', color: '#ef4444', fontWeight: 600, background: 'rgba(239,68,68,0.1)', borderRadius: '6px', borderLeft: '3px solid #ef4444' }}>
+                RED FLAG: Heavy Delta Premier patients. As a new owner, your fee schedule drops ~25% on these patients. Same work, same overhead — 25% less revenue. Factor this into your valuation.
               </div>
             )}
             <button className="buy-btn" style={{ width: '100%', marginTop: '12px', padding: '10px', fontSize: '14px', fontWeight: 700 }}
@@ -1961,7 +2150,9 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
     setGameState(prev => ({
       ...prev,
       staff: [...prev.staff, candidate],
+      totalHires: (prev.totalHires || 0) + 1,
       log: [...prev.log, { day: prev.day, text: `Hired ${candidate.name} (${candidate.role}) at $${(candidate.salary / 1000).toFixed(0)}K/yr`, type: 'positive' }],
+      eventLog: [...(prev.eventLog || []), { day: prev.day, type: 'hire', detail: `Hired ${candidate.role} (${candidate.name})`, skill: candidate.skill }],
     }));
     refreshCandidates();
   };
@@ -1972,7 +2163,9 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
       return {
         ...prev,
         staff: prev.staff.filter(s => s.id !== id),
+        totalFires: (prev.totalFires || 0) + 1,
         log: [...prev.log, { day: prev.day, text: `Fired ${member?.name || 'staff member'}.`, type: 'negative' }],
+        eventLog: [...(prev.eventLog || []), { day: prev.day, type: 'fire', detail: `Fired ${member?.role || 'staff'} (${member?.name || 'unknown'})` }],
       };
     });
   };
@@ -1991,9 +2184,11 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
     setGameState(prev => {
       const active = prev.activeMarketing || [];
       const isActive = active.includes(id);
+      const channelsUsed = prev.marketingChannelsUsed || [];
       return {
         ...prev,
         activeMarketing: isActive ? active.filter(m => m !== id) : [...active, id],
+        marketingChannelsUsed: !isActive && !channelsUsed.includes(id) ? [...channelsUsed, id] : channelsUsed,
         log: [...prev.log, { day: prev.day, text: isActive ? `Stopped ${MARKETING_OPTIONS.find(m => m.id === id)?.name}` : `Started ${MARKETING_OPTIONS.find(m => m.id === id)?.name}`, type: 'info' }],
       };
     });
@@ -2084,9 +2279,15 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
   const startTraining = (program) => {
     if (gameState.cash < program.cost) return;
     if ((gameState.activeTraining || []).some(t => t.id === program.id)) return;
+    // Stackable programs can be re-done, but respect maxStacks
+    if (program.stackable && program.maxStacks) {
+      const completedCount = (gameState.completedTraining || []).filter(id => id === program.id).length;
+      if (completedCount >= program.maxStacks) return;
+    }
     setGameState(prev => ({
       ...prev,
       cash: prev.cash - program.cost,
+      totalTrainingSpend: (prev.totalTrainingSpend || 0) + program.cost,
       activeTraining: [...(prev.activeTraining || []), { id: program.id, daysLeft: program.duration, startDay: prev.day }],
       log: [...prev.log, { day: prev.day, text: `Started training: ${program.name} ($${program.cost.toLocaleString()})`, type: 'info' }],
     }));
@@ -2210,7 +2411,7 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
             </div>
             <h4 className="mgmt-subtitle">Available Candidates</h4>
             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '8px' }}>
-              {['all', 'Dentist', 'Hygienist', 'Dental Assistant', 'Front Desk', 'Office Manager', 'Specialist'].map(r => (
+              {['all', 'Dentist', 'Hygienist', 'Dental Assistant', 'Front Desk', 'Office Manager', 'Specialists'].map(r => (
                 <button key={r} onClick={() => setRoleFilter(r)} style={{
                   fontSize: '10px', padding: '3px 8px', borderRadius: '12px', border: 'none', cursor: 'pointer',
                   background: roleFilter === r ? 'rgba(59,130,246,0.3)' : 'rgba(30,41,59,0.5)',
@@ -2219,7 +2420,7 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
               ))}
             </div>
             <div className="candidates">
-              {hiringCandidates.filter(c => roleFilter === 'all' || c.role === roleFilter).map(c => (
+              {hiringCandidates.filter(c => roleFilter === 'all' || c.role === roleFilter || (roleFilter === 'Specialists' && SPECIALIST_ROLES.includes(c.role))).map(c => (
                 <div key={c.id} style={{ padding: '10px', marginBottom: '6px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', border: '1px solid rgba(100,116,139,0.2)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
                     <div>
@@ -2242,6 +2443,14 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
                       </div>
                     ))}
                   </div>
+                  {c.isSpecialist && (
+                    <div style={{ fontSize: '10px', padding: '4px 6px', marginBottom: '4px', background: 'rgba(168,85,247,0.1)', borderRadius: '4px', borderLeft: '2px solid #a855f7' }}>
+                      <div style={{ color: '#c084fc', fontWeight: 600 }}>Specialist: {c.role}</div>
+                      <div style={{ color: '#94a3b8' }}>{c.specialty}</div>
+                      <div style={{ color: '#eab308' }}>Fee split: You keep {Math.round((1 - c.feeScheduleSplit) * 100)}% of their production</div>
+                      {c.frictionChance > 0.10 && <div style={{ color: '#ef4444' }}>High friction risk — may cause staff conflicts</div>}
+                    </div>
+                  )}
                   <div style={{ fontSize: '10px', lineHeight: '1.5' }}>
                     {c.strength && <div style={{ color: '#4ade80' }}>{'+ '}{c.strength}</div>}
                     {c.weakness && <div style={{ color: '#fbbf24' }}>{'- '}{c.weakness}</div>}
@@ -2353,6 +2562,25 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
                 </div>
               )}
             </div>
+
+            {/* Treatment Acceptance Rate */}
+            {(() => {
+              const baseAcceptance = stats?.blendedTreatmentAcceptance || 0.85;
+              const bonus = gameState.treatmentAcceptanceBonus || 0;
+              const effective = Math.min(0.98, baseAcceptance);
+              const color = effective > 0.85 ? '#22c55e' : effective > 0.70 ? '#eab308' : '#ef4444';
+              return (
+                <div style={{ padding: '8px 10px', marginBottom: '10px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>Treatment Acceptance Rate</div>
+                    <div style={{ fontSize: '10px', color: '#64748b' }}>
+                      {bonus > 0 ? `Base ${Math.round((effective - bonus) * 100)}% + ${Math.round(bonus * 100)}% from training` : 'Invest in Case Acceptance Training to boost this'}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '18px', fontWeight: 700, color }}>{Math.round(effective * 100)}%</div>
+                </div>
+              );
+            })()}
 
             {/* Per-Plan Profitability Table */}
             {margins.length > 0 && (
@@ -2498,6 +2726,40 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
                 </div>
               );
             })}
+            {/* Fee Schedule Comparison — the core economics lesson */}
+            <details style={{ marginTop: '10px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', padding: '10px' }}>
+              <summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#94a3b8' }}>Fee Schedule: What Each Plan Actually Pays</summary>
+              <div style={{ marginTop: '8px', overflowX: 'auto' }}>
+                <table style={{ width: '100%', fontSize: '10px', borderCollapse: 'collapse', color: '#cbd5e1' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid rgba(100,116,139,0.3)' }}>
+                      <th style={{ textAlign: 'left', padding: '4px 6px', color: '#94a3b8' }}>Procedure</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', color: '#eab308' }}>Cash</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', color: '#22c55e' }}>Premier</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', color: '#3b82f6' }}>PPO</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', color: '#ef4444' }}>HMO</th>
+                      <th style={{ textAlign: 'right', padding: '4px 6px', color: '#a855f7' }}>Medicaid</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {FEE_SCHEDULE_EXAMPLES.map(row => (
+                      <tr key={row.code} style={{ borderBottom: '1px solid rgba(100,116,139,0.1)' }}>
+                        <td style={{ padding: '3px 6px', color: '#94a3b8' }}>{row.procedure}</td>
+                        <td style={{ textAlign: 'right', padding: '3px 6px', color: '#eab308', fontWeight: 600 }}>${row.cashFee}</td>
+                        <td style={{ textAlign: 'right', padding: '3px 6px', color: '#22c55e' }}>${Math.round(row.cashFee * row.premierRate)}</td>
+                        <td style={{ textAlign: 'right', padding: '3px 6px', color: '#3b82f6' }}>${Math.round(row.cashFee * row.ppoRate)}</td>
+                        <td style={{ textAlign: 'right', padding: '3px 6px', color: '#ef4444' }}>${Math.round(row.cashFee * row.hmoRate)}</td>
+                        <td style={{ textAlign: 'right', padding: '3px 6px', color: '#a855f7' }}>${Math.round(row.cashFee * row.medicaidRate)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div style={{ marginTop: '6px', fontSize: '10px', color: '#64748b', fontStyle: 'italic' }}>
+                  Same procedure, same chair time, same overhead — wildly different revenue. This is why insurance mix matters more than patient count.
+                </div>
+              </div>
+            </details>
+
             <div style={{ marginTop: '10px', padding: '10px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', fontSize: '11px', color: '#64748b' }}>
               <strong style={{ color: '#94a3b8' }}>The Insurance Trap:</strong> New practices accept everything to fill chairs. Smart practices eventually drop low-paying plans as reputation builds. The goal: fill chairs with high-value patients, not just any patients.
               {hasCash && <span style={{ display: 'block', marginTop: '4px', color: '#eab308' }}>Watch your cannibalization! Each insurance plan steals some patients who would have paid cash.</span>}
@@ -2981,6 +3243,7 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
                         setGameState(prev => ({
                           ...prev,
                           cash: prev.cash - consultant.cost,
+                          totalConsultantSpend: (prev.totalConsultantSpend || 0) + consultant.cost,
                           patients: prev.patients + (consultant.successEffect.patientBoost || 0),
                           reputation: Math.min(5, prev.reputation + (consultant.successEffect.reputationBoost || 0)),
                           debt: Math.max(0, prev.debt - (consultant.successEffect.debtReduction || 0)),
@@ -3011,6 +3274,7 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
                         setGameState(prev => ({
                           ...prev,
                           cash: prev.cash - consultant.cost,
+                          totalConsultantSpend: (prev.totalConsultantSpend || 0) + consultant.cost,
                           consultantCooldowns: {
                             ...(prev.consultantCooldowns || {}),
                             [consultant.id]: prev.day + 45,
@@ -3470,7 +3734,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         const def = EQUIPMENT.find(e => e.id === eq);
         return def && def.patientsPerDay > 0;
       });
-      const hasDentist = (bd.staff || []).some(s => s.role === 'Dentist' || s.role === 'Specialist');
+      const hasDentist = (bd.staff || []).some(s => isProvider(s));
       const hasMarketing = (bd.activeMarketing || []).length > 0;
 
       const hasCompressor = (bd.equipment || []).includes('compressor');
@@ -3525,6 +3789,15 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         locations: [],
         hasRegionalManager: false,
         locationCount: 1,
+        // Tracking for scorecard
+        totalHires: 0, totalFires: 0, totalStaffQuit: 0,
+        totalMarketingSpend: 0, marketingChannelsUsed: [],
+        totalTrainingSpend: 0, totalConsultantSpend: 0,
+        totalRevenue: 0, totalExpenses: 0,
+        peakPatients: 0, peakCash: 0, worstCash: 0,
+        bestMonthRevenue: 0, worstMonthRevenue: Infinity,
+        totalPatientsServed: 0,
+        eventLog: [], // key moments for feedback
       };
     } else {
       // Acquisition path — use fixWindowData from the Fix Window screen
@@ -3565,6 +3838,15 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         locations: [],
         hasRegionalManager: false,
         locationCount: 1,
+        // Tracking for scorecard
+        totalHires: 0, totalFires: 0, totalStaffQuit: 0,
+        totalMarketingSpend: 0, marketingChannelsUsed: [],
+        totalTrainingSpend: 0, totalConsultantSpend: 0,
+        totalRevenue: 0, totalExpenses: 0,
+        peakPatients: 0, peakCash: 0, worstCash: 0,
+        bestMonthRevenue: 0, worstMonthRevenue: Infinity,
+        totalPatientsServed: 0,
+        eventLog: [],
       };
     }
   });
@@ -3580,7 +3862,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
     const seed = codeToSeed(challengeData.code);
     challengeSchedule.current = generateChallengeSchedule(seed, diff.gameDuration, diff.id);
   }
-  const stats = calculateDailyStats(gameState);
+  const stats = (() => { try { return calculateDailyStats(gameState); } catch (e) { console.error('calculateDailyStats error:', e); return { dailyRevenue: 0, totalDailyCosts: 0, dailyProfit: 0, actualPatients: 0, reputationChange: 0, satisfactionScore: 50, annualRevenuePerSqft: 0 }; } })();
 
   // ── Handle Key Decision choice ──
   const handleDecision = useCallback((decision, chosenOption) => {
@@ -3672,6 +3954,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           const quitter = targets[targets.length - 1]; // least senior of the targets
           if (quitter) {
             updated.staff = updated.staff.filter(s => s.id !== quitter.id);
+            updated.totalStaffQuit = (updated.totalStaffQuit || 0) + 1;
             newLog.push({ day: updated.day, text: `${quitter.name} quit anyway despite the offer.`, type: 'negative' });
           }
         }
@@ -3684,6 +3967,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         atRisk.forEach(s => {
           if (Math.random() < effects.quitChance) {
             updated.staff = updated.staff.filter(st => st.id !== s.id);
+            updated.totalStaffQuit = (updated.totalStaffQuit || 0) + 1;
             newLog.push({ day: updated.day, text: `${s.name} followed through and quit!`, type: 'negative' });
           }
         });
@@ -3911,6 +4195,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       let trainingCompleteDays = { ...(prev.trainingCompleteDays || {}) };
       let trainingMoraleBoost = 0;
       let trainingSkillBoost = 0;
+      let treatmentAcceptanceBoostDelta = 0;
 
       updatedTraining = updatedTraining.map(t => ({ ...t, daysLeft: t.daysLeft - 1 }));
       const justCompleted = updatedTraining.filter(t => t.daysLeft <= 0);
@@ -3926,6 +4211,10 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         if (prog.skillBoost) trainingSkillBoost += prog.skillBoost;
         if (prog.cleanlinessBoost) cleanlinessChange += prog.cleanlinessBoost;
         if (prog.satisfactionBoost) repDelta += (prog.reputationBoost || 0);
+        if (prog.treatmentAcceptanceBoost) {
+          treatmentAcceptanceBoostDelta += prog.treatmentAcceptanceBoost;
+          newLog.push({ day: prev.day, text: `Treatment acceptance improved by +${Math.round(prog.treatmentAcceptanceBoost * 100)}%! Your team closes more cases now.`, type: 'positive' });
+        }
       });
 
       // Active training buffs (completed within last 60 days)
@@ -4156,7 +4445,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         if (availableStaff.length > 0) {
           const leaver = availableStaff[Math.floor(Math.random() * availableStaff.length)];
           newLog.push({ day: prev.day, text: `${leaver.name} quit! "I haven't been paid in weeks. I'm done."`, type: 'negative' });
-          prev = { ...prev, staff: prev.staff.filter(s => s.id !== leaver.id) };
+          prev = { ...prev, staff: prev.staff.filter(s => s.id !== leaver.id), totalStaffQuit: (prev.totalStaffQuit || 0) + 1 };
         }
       }
 
@@ -4416,9 +4705,15 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       // Monthly summary + MANDATORY LOAN PAYMENT
       if (prev.day % 30 === 0) {
         const monthNum = prev.day / 30;
+        const thisMonthRev = s.dailyRevenue * 30;
+        prev = {
+          ...prev,
+          bestMonthRevenue: Math.max(prev.bestMonthRevenue || 0, thisMonthRev),
+          worstMonthRevenue: Math.min(prev.worstMonthRevenue ?? thisMonthRev, thisMonthRev),
+        };
         newLog.push({
           day: prev.day,
-          text: `═══ MONTH ${monthNum} ═══ Rev: $${(s.dailyRevenue * 30).toLocaleString()}/mo | Patients: ${prev.patients + patientDelta} | Rating: ${(prev.reputation + repDelta).toFixed(1)}⭐ | Clean: ${Math.round(newCleanliness)}`,
+          text: `═══ MONTH ${monthNum} ═══ Rev: $${thisMonthRev.toLocaleString()}/mo | Patients: ${prev.patients + patientDelta} | Rating: ${(prev.reputation + repDelta).toFixed(1)}⭐ | Clean: ${Math.round(newCleanliness)}`,
           type: 'milestone',
         });
 
@@ -4471,6 +4766,15 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         completedTraining: newCompletedTraining,
         trainingCompleteDays: trainingCompleteDays,
         activeConsultantBuffs: updatedConsultantBuffs,
+        treatmentAcceptanceBonus: Math.min(0.24, (prev.treatmentAcceptanceBonus || 0) + treatmentAcceptanceBoostDelta),
+        // Cumulative tracking for scorecard
+        totalRevenue: (prev.totalRevenue || 0) + Math.max(0, s.dailyRevenue),
+        totalExpenses: (prev.totalExpenses || 0) + s.totalDailyCosts,
+        totalMarketingSpend: (prev.totalMarketingSpend || 0) + (s.dailyMarketing || 0),
+        totalPatientsServed: (prev.totalPatientsServed || 0) + s.actualPatients,
+        peakPatients: Math.max(prev.peakPatients || 0, prev.patients + patientDelta),
+        peakCash: Math.max(prev.peakCash || 0, prev.cash + cashDelta),
+        worstCash: Math.min(prev.worstCash ?? prev.cash, prev.cash + cashDelta),
       };
     });
 
@@ -4577,268 +4881,266 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
     }
   }, [isGameOver, isSeasonComplete]);
 
-  // Season complete!
+  // ═══════════════════════════════════════════════════════
+  // COMPREHENSIVE END-OF-GAME SCORECARD
+  // This is the payoff screen — the most important view in the game
+  // ═══════════════════════════════════════════════════════
   const isDsoSold = gameState.endReason && gameState.endReason.includes('Sold to DSO');
-  if (isSeasonComplete && !isGameOver) {
+  const isEndScreen = (isSeasonComplete && !isGameOver) || isGameOver;
+
+  if (isEndScreen) {
+    const isBankrupt = isGameOver;
+    const feedback = generateSeasonFeedback(gameState, stats, diff);
+    const modeBoard = score ? getLeaderboardByMode(diff.name) : [];
+    const rank = score ? modeBoard.findIndex(e => e.overallScore <= score.overall) : -1;
+    const isNewHigh = score && (modeBoard.length === 0 || score.overall > (modeBoard[0]?.overallScore || 0));
+
+    // Compute practice archetype based on play style
+    const archetype = (() => {
+      if (!score) return { name: 'Practice Owner', icon: '🦷', desc: 'You gave it a shot.' };
+      const cats = score.categories;
+      const fin = cats.financial?.score || 0;
+      const mkt = cats.marketingGrowth?.score || 0;
+      const staff = cats.staffingHR?.score || 0;
+      const care = cats.patientCare?.score || 0;
+      const train = cats.training?.score || 0;
+      const doc = cats.doctorMgmt?.score || 0;
+      if (score.overall >= 850) return { name: 'Elite Practice', icon: '👑', desc: 'Top-tier management across every category. You\'d crush it in the real world.' };
+      if (score.overall >= 700 && fin >= 75) return { name: 'Profit Machine', icon: '💎', desc: 'Strong margins, lean operations. The banks love you.' };
+      if (mkt >= 80 && care >= 70) return { name: 'Growth Engine', icon: '🚀', desc: 'Aggressive marketing paired with solid patient care. Classic expansion model.' };
+      if (staff >= 80 && train >= 70) return { name: 'People-First Practice', icon: '🤝', desc: 'You invested in your team. Low turnover, high morale — the Costco of dentistry.' };
+      if (care >= 85) return { name: 'Patient Champion', icon: '⭐', desc: '5-star care, loyal patients. Revenue follows reputation.' };
+      if (doc >= 80 && staff >= 60) return { name: 'Clinical Powerhouse', icon: '🔬', desc: 'Elite providers, strong clinical outcomes. Specialists drive premium revenue.' };
+      if (fin >= 70 && mkt < 40) return { name: 'Silent Earner', icon: '🤫', desc: 'Profitable but invisible. More marketing could have doubled your growth.' };
+      if (mkt >= 70 && fin < 40) return { name: 'Money Pit', icon: '🕳️', desc: 'Patients everywhere, profit nowhere. You marketed before you had the systems to handle it.' };
+      if (score.overall >= 500) return { name: 'Solid Practice', icon: '🏥', desc: 'Middle of the pack. Some categories strong, others need work.' };
+      if (isBankrupt) return { name: 'Cautionary Tale', icon: '📉', desc: 'Every bankrupt practice teaches a lesson. The question is whether you learn it.' };
+      return { name: 'Work in Progress', icon: '🔧', desc: 'Lots of room to grow. Focus on your weakest categories next run.' };
+    })();
+
+    // Key stats for the "by the numbers" section
+    const keyStats = [
+      { label: 'Days Survived', value: gameState.day, icon: '📅' },
+      { label: 'Total Revenue', value: `$${(gameState.totalRevenue || 0).toLocaleString()}`, icon: '💵' },
+      { label: 'Patients Served', value: (gameState.totalPatientsServed || 0).toLocaleString(), icon: '🧑‍🤝‍🧑' },
+      { label: 'Staff Hired', value: gameState.totalHires || 0, icon: '📋' },
+      { label: 'Staff Lost', value: (gameState.totalFires || 0) + (gameState.totalStaffQuit || 0), icon: '🚪' },
+      { label: 'Peak Cash', value: `$${(gameState.peakCash || 0).toLocaleString()}`, icon: '📈' },
+      { label: 'Worst Cash', value: `$${(gameState.worstCash || 0).toLocaleString()}`, icon: '📉' },
+      { label: 'Peak Patients', value: gameState.peakPatients || 0, icon: '🏔️' },
+      { label: 'Training Spend', value: `$${(gameState.totalTrainingSpend || 0).toLocaleString()}`, icon: '🎓' },
+      { label: 'Marketing Spend', value: `$${(gameState.totalMarketingSpend || 0).toLocaleString()}`, icon: '📢' },
+    ];
+
     return (
-      <div className="game-over" style={{ background: isDsoSold ? 'linear-gradient(135deg, #0a1628 0%, #1a2a3e 50%, #0a1628 100%)' : 'linear-gradient(135deg, #0a1628 0%, #1a2744 100%)' }}>
-        {isDsoSold ? (
-          <>
-            <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🏢</div>
-            <h1 style={{ color: gameState.dsoNetProceeds > 0 ? '#60a5fa' : '#ef4444' }}>PRACTICE SOLD</h1>
-            <p>You sold your practice to a DSO on Day {gameState.day}.</p>
-            <div style={{ margin: '15px auto', maxWidth: '400px', background: 'rgba(30,41,59,0.6)', borderRadius: '12px', padding: '16px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(15,23,42,0.5)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '10px', color: '#64748b' }}>Sale Price</div>
-                  <div style={{ fontSize: '1.2rem', color: '#22c55e', fontWeight: 'bold' }}>${(gameState.dsoSalePrice || 400000).toLocaleString()}</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(15,23,42,0.5)', borderRadius: '8px' }}>
-                  <div style={{ fontSize: '10px', color: '#64748b' }}>Debt Settled</div>
-                  <div style={{ fontSize: '1.2rem', color: '#ef4444', fontWeight: 'bold' }}>-${(gameState.dsoDebtSettled || 0).toLocaleString()}</div>
-                </div>
-                <div style={{ textAlign: 'center', padding: '8px', background: 'rgba(15,23,42,0.5)', borderRadius: '8px', gridColumn: '1 / -1' }}>
-                  <div style={{ fontSize: '10px', color: '#64748b' }}>Net Proceeds</div>
-                  <div style={{ fontSize: '1.5rem', color: (gameState.dsoNetProceeds || 0) > 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold', fontFamily: 'Fredoka One' }}>
-                    {(gameState.dsoNetProceeds || 0) > 0 ? '+' : ''}${(gameState.dsoNetProceeds || 0).toLocaleString()}
-                  </div>
+      <div className="game-over" style={{ background: isBankrupt
+        ? 'linear-gradient(180deg, #1a0a0a 0%, #0a1628 30%)'
+        : isDsoSold ? 'linear-gradient(180deg, #0a1628 0%, #1a2a3e 50%, #0a1628 100%)'
+        : 'linear-gradient(180deg, #0a1628 0%, #0d1f3c 40%, #0a1628 100%)',
+        paddingBottom: '40px',
+      }}>
+
+        {/* ── HEADER: Outcome Banner ── */}
+        {isBankrupt ? (
+          <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '8px' }}>💀</div>
+            <h1 style={{ color: '#ef4444', fontFamily: 'Fredoka One', fontSize: '2rem', margin: '0 0 4px' }}>PRACTICE CLOSED</h1>
+            <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0 }}>Bankrupt on Day {gameState.day} of {gameState.gameDuration || diff.gameDuration}</p>
+            <p style={{ color: '#ef4444', fontSize: '12px', margin: '4px 0 0' }}>Final debt: ${Math.abs(gameState.cash).toLocaleString()}</p>
+          </div>
+        ) : isDsoSold ? (
+          <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '8px' }}>🏢</div>
+            <h1 style={{ color: (gameState.dsoNetProceeds || 0) > 0 ? '#60a5fa' : '#ef4444', fontFamily: 'Fredoka One', fontSize: '2rem', margin: '0 0 4px' }}>PRACTICE SOLD</h1>
+            <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0 }}>Sold to DSO on Day {gameState.day}</p>
+            <div style={{ margin: '12px auto', maxWidth: '360px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+              <div style={{ padding: '8px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#64748b' }}>Sale Price</div>
+                <div style={{ fontSize: '1rem', color: '#22c55e', fontWeight: 'bold' }}>${(gameState.dsoSalePrice || 400000).toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '8px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#64748b' }}>Debt Paid</div>
+                <div style={{ fontSize: '1rem', color: '#ef4444', fontWeight: 'bold' }}>-${(gameState.dsoDebtSettled || 0).toLocaleString()}</div>
+              </div>
+              <div style={{ padding: '8px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '9px', color: '#64748b' }}>Net</div>
+                <div style={{ fontSize: '1rem', color: (gameState.dsoNetProceeds || 0) > 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
+                  {(gameState.dsoNetProceeds || 0) > 0 ? '+' : ''}${(gameState.dsoNetProceeds || 0).toLocaleString()}
                 </div>
               </div>
-              {(gameState.dsoNetProceeds || 0) > 0 ? (
-                <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '12px', lineHeight: 1.5, textAlign: 'center' }}>
-                  The bank got their cut first. You walked away with ${(gameState.dsoNetProceeds || 0).toLocaleString()}.
-                  Safe outcome — no more risk, no more overhead, no more sleepless nights. But you gave up ownership and whatever the practice could have become.
-                </p>
-              ) : (
-                <p style={{ fontSize: '12px', color: '#ef4444', marginTop: '12px', lineHeight: 1.5, textAlign: 'center' }}>
-                  The sale didn't cover your debt. The entire ${(gameState.dsoSalePrice || 400000).toLocaleString()} went to the bank, and you still owe ${Math.abs(gameState.dsoNetProceeds || 0).toLocaleString()}.
-                  You lost the practice AND still have debt. This is what happens when you sell underwater.
-                </p>
-              )}
             </div>
-          </>
+          </div>
         ) : (
-          <>
-            <div style={{ fontSize: '3rem', marginBottom: '10px' }}>🏆</div>
-            <h1 style={{ color: '#22c55e' }}>SEASON COMPLETE!</h1>
-            <p>{diff.gameDuration} days of practice management complete.</p>
-          </>
-        )}
-        <p style={{ color: '#64748b', fontSize: '14px' }}>Difficulty: {diff.icon} {diff.name}</p>
-        {!score && (
-          <div style={{ margin: '20px auto', padding: '16px', background: 'rgba(30,41,59,0.5)', borderRadius: '10px', maxWidth: '400px' }}>
-            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Final Cash: <strong style={{ color: gameState.cash > 0 ? '#22c55e' : '#ef4444' }}>${gameState.cash.toLocaleString()}</strong></div>
-            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Patients: <strong>{gameState.patients}</strong> · Rating: <strong>{gameState.reputation.toFixed(1)}⭐</strong></div>
-            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Staff: <strong>{gameState.staff.length}</strong> · Day: <strong>{gameState.day}</strong></div>
+          <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '8px' }}>🏆</div>
+            <h1 style={{ color: '#22c55e', fontFamily: 'Fredoka One', fontSize: '2rem', margin: '0 0 4px' }}>SEASON COMPLETE!</h1>
+            <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0 }}>{diff.gameDuration} days of practice management complete</p>
           </div>
         )}
-        {score && (
-          <div style={{ margin: '20px auto', maxWidth: '500px', textAlign: 'left' }}>
-            {/* Big Score Display */}
-            <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-              <div style={{ fontSize: '3.5rem', fontFamily: 'Fredoka One', color: score.overallColor }}>{score.overall}</div>
-              <div style={{ fontSize: '1rem', color: score.overallColor }}>/ 1000 — {score.overallGrade}</div>
-            </div>
 
-            {/* All 10 Categories */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+        <p style={{ color: '#475569', fontSize: '12px', textAlign: 'center', margin: '0 0 16px' }}>{diff.icon} {diff.name} Mode</p>
+
+        {/* ── PRACTICE ARCHETYPE ── */}
+        <div style={{ margin: '0 auto 16px', maxWidth: '450px', padding: '14px 18px', background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(167,139,250,0.08))', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '4px' }}>{archetype.icon}</div>
+          <div style={{ fontSize: '16px', fontFamily: 'Fredoka One', color: '#e2e8f0', marginBottom: '4px' }}>{archetype.name}</div>
+          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>{archetype.desc}</div>
+        </div>
+
+        {/* ── BIG SCORE ── */}
+        {score && (
+          <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+            <div style={{ fontSize: '4rem', fontFamily: 'Fredoka One', color: score.overallColor, lineHeight: 1, textShadow: `0 0 40px ${score.overallColor}33` }}>
+              {score.overall}
+            </div>
+            <div style={{ fontSize: '1rem', color: score.overallColor, fontWeight: 600, marginTop: '2px' }}>/ 1000 — {score.overallGrade}</div>
+            {isNewHigh && (
+              <div style={{ marginTop: '8px', fontSize: '14px', fontFamily: 'Fredoka One', color: '#eab308', animation: 'pulse 1.5s ease-in-out infinite' }}>
+                New High Score for {diff.name}!
+              </div>
+            )}
+            <p style={{ color: '#64748b', fontSize: '11px', margin: '4px 0 0' }}>
+              Rank #{rank === -1 ? modeBoard.length + 1 : rank + 1} on {diff.name} leaderboard
+            </p>
+          </div>
+        )}
+
+        {/* ── CATEGORY BREAKDOWN ── */}
+        {score && (
+          <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
+            <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>Performance Breakdown</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {Object.entries(score.categories).map(([key, cat]) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 10px', background: 'rgba(30,41,59,0.5)', borderRadius: '6px' }}>
-                  <span style={{ fontSize: '16px', width: '22px', textAlign: 'center' }}>{cat.icon}</span>
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', borderLeft: `3px solid ${cat.color}` }}>
+                  <span style={{ fontSize: '18px', width: '24px', textAlign: 'center' }}>{cat.icon}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 'bold' }}>{cat.name}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                      <span style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>{cat.name}</span>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>{cat.weight}% weight</span>
+                    </div>
+                    <div style={{ width: '100%', height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden', marginBottom: '3px' }}>
+                      <div style={{ width: `${cat.score}%`, height: '100%', background: `linear-gradient(90deg, ${cat.color}88, ${cat.color})`, borderRadius: '3px', transition: 'width 1s ease-out' }} />
+                    </div>
                     <div style={{ fontSize: '10px', color: '#64748b' }}>{cat.value}</div>
                   </div>
-                  <div style={{ width: '60px', height: '6px', background: '#1e293b', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ width: `${cat.score}%`, height: '100%', background: cat.color, borderRadius: '3px' }} />
+                  <div style={{ textAlign: 'center', minWidth: '36px' }}>
+                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: cat.color, fontFamily: 'Fredoka One' }}>{cat.grade}</div>
+                    <div style={{ fontSize: '9px', color: '#64748b' }}>{cat.score}/100</div>
                   </div>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: cat.color, minWidth: '28px', textAlign: 'right' }}>{cat.grade}</div>
                 </div>
               ))}
-            </div>
-
-            {/* Financial Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '10px' }}>
-              <div style={{ padding: '8px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', textAlign: 'center' }}>
-                <div style={{ fontSize: '9px', color: '#64748b' }}>Final Cash</div>
-                <div style={{ fontSize: '1rem', color: gameState.cash > 0 ? '#22c55e' : '#ef4444' }}>${gameState.cash.toLocaleString()}</div>
-              </div>
-              <div style={{ padding: '8px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', textAlign: 'center' }}>
-                <div style={{ fontSize: '9px', color: '#64748b' }}>Monthly Profit</div>
-                <div style={{ fontSize: '1rem', color: score.metrics.monthlyProfit >= 0 ? '#22c55e' : '#ef4444' }}>${score.metrics.monthlyProfit.toLocaleString()}</div>
-              </div>
-              <div style={{ padding: '8px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', textAlign: 'center' }}>
-                <div style={{ fontSize: '9px', color: '#64748b' }}>Reputation</div>
-                <div style={{ fontSize: '1rem', color: '#cbd5e1' }}>{gameState.reputation.toFixed(1)} ⭐</div>
-              </div>
             </div>
           </div>
         )}
-        {/* Season Feedback */}
-        {(() => {
-          const feedback = generateSeasonFeedback(gameState, stats, diff);
-          if (feedback.length === 0) return null;
-          return (
-            <div style={{ margin: '15px auto', maxWidth: '450px', textAlign: 'left' }}>
-              <h3 style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '8px', textAlign: 'center' }}>Season Report Card</h3>
+
+        {/* ── FINANCIAL DASHBOARD ── */}
+        <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
+          <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>Financial Summary</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+            <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Final Cash</div>
+              <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: gameState.cash > 0 ? '#22c55e' : '#ef4444', marginTop: '2px' }}>${gameState.cash.toLocaleString()}</div>
+            </div>
+            {score && (
+              <>
+                <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Monthly Profit</div>
+                  <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: score.metrics.monthlyProfit >= 0 ? '#22c55e' : '#ef4444', marginTop: '2px' }}>${Math.round(score.metrics.monthlyProfit).toLocaleString()}</div>
+                </div>
+                <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Overhead</div>
+                  <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: score.metrics.overheadRatio < 65 ? '#22c55e' : score.metrics.overheadRatio < 75 ? '#eab308' : '#ef4444', marginTop: '2px' }}>{score.metrics.overheadRatio}%</div>
+                </div>
+              </>
+            )}
+            <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reputation</div>
+              <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: gameState.reputation >= 4 ? '#22c55e' : gameState.reputation >= 3 ? '#eab308' : '#ef4444', marginTop: '2px' }}>{gameState.reputation.toFixed(1)} ⭐</div>
+            </div>
+            <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Patients</div>
+              <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: '#cbd5e1', marginTop: '2px' }}>{gameState.patients}</div>
+            </div>
+            <div style={{ padding: '10px', background: 'rgba(30,41,59,0.6)', borderRadius: '10px', textAlign: 'center' }}>
+              <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Team Size</div>
+              <div style={{ fontSize: '1.1rem', fontFamily: 'Fredoka One', color: '#cbd5e1', marginTop: '2px' }}>{gameState.staff.length}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── BY THE NUMBERS ── */}
+        <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
+          <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>By The Numbers</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px' }}>
+            {keyStats.map((stat, i) => (
+              <div key={i} style={{ padding: '8px 4px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', textAlign: 'center' }}>
+                <div style={{ fontSize: '14px', marginBottom: '2px' }}>{stat.icon}</div>
+                <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#e2e8f0' }}>{stat.value}</div>
+                <div style={{ fontSize: '8px', color: '#64748b', lineHeight: 1.2 }}>{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── SEASON REPORT CARD (Strengths, Weaknesses, Tips) ── */}
+        {feedback.length > 0 && (
+          <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
+            <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>
+              {isBankrupt ? 'What Went Wrong' : 'Season Report Card'}
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
               {feedback.map((fb, i) => (
-                <div key={i} style={{ padding: '8px', marginBottom: '4px', background: 'rgba(30,41,59,0.4)', borderRadius: '6px', borderLeft: `3px solid ${fb.type === 'strength' ? '#22c55e' : fb.type === 'weakness' ? '#ef4444' : '#eab308'}` }}>
-                  <div style={{ fontSize: '12px', fontWeight: 'bold', color: fb.type === 'strength' ? '#22c55e' : fb.type === 'weakness' ? '#ef4444' : '#eab308' }}>
-                    {fb.type === 'strength' ? 'Strength' : fb.type === 'weakness' ? 'Weakness' : 'Tip'}: {fb.area}
+                <div key={i} style={{
+                  padding: '10px 12px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px',
+                  borderLeft: `3px solid ${fb.type === 'strength' ? '#22c55e' : fb.type === 'weakness' ? '#ef4444' : '#eab308'}`,
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+                    <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
+                      background: fb.type === 'strength' ? 'rgba(34,197,94,0.15)' : fb.type === 'weakness' ? 'rgba(239,68,68,0.15)' : 'rgba(234,179,8,0.15)',
+                      color: fb.type === 'strength' ? '#22c55e' : fb.type === 'weakness' ? '#ef4444' : '#eab308',
+                    }}>
+                      {fb.type === 'strength' ? 'Strength' : fb.type === 'weakness' ? 'Needs Work' : 'Pro Tip'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>{fb.area}</span>
                   </div>
-                  <div style={{ fontSize: '11px', color: '#94a3b8' }}>{fb.text}</div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.5 }}>{fb.text}</div>
                 </div>
               ))}
             </div>
-          );
-        })()}
+          </div>
+        )}
 
-        {/* Decision Replay */}
+        {/* ── KEY DECISIONS REPLAY ── */}
         {gameState.decisionHistory && gameState.decisionHistory.length > 0 && (
-          <div style={{ margin: '15px auto', maxWidth: '450px', textAlign: 'left' }}>
-            <h3 style={{ color: '#eab308', fontSize: '13px', marginBottom: '8px', textAlign: 'center' }}>Key Decisions You Made</h3>
+          <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
+            <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>Key Decisions</h3>
             {gameState.decisionHistory.map((d, i) => (
-              <div key={i} style={{ padding: '10px', marginBottom: '6px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', borderLeft: '3px solid #eab308' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#e2e8f0' }}>{d.chosenIcon} {d.title}</div>
-                  <div style={{ fontSize: '10px', color: '#64748b' }}>Day {d.day}</div>
+              <div key={i} style={{ padding: '10px 12px', marginBottom: '5px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', borderLeft: '3px solid #eab308' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                  <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#e2e8f0' }}>{d.chosenIcon} {d.title}</span>
+                  <span style={{ fontSize: '10px', color: '#475569', background: 'rgba(30,41,59,0.6)', padding: '2px 6px', borderRadius: '4px' }}>Day {d.day}</span>
                 </div>
-                <div style={{ fontSize: '11px', color: '#3b82f6', marginBottom: '3px' }}>Chose: {d.chosenLabel}</div>
+                <div style={{ fontSize: '11px', color: '#3b82f6', marginBottom: '2px' }}>Chose: {d.chosenLabel}</div>
                 <div style={{ fontSize: '11px', color: '#94a3b8', lineHeight: 1.4 }}>{d.consequence}</div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Challenge code display */}
+        {/* ── CHALLENGE CODE ── */}
         {challengeData?.code && (
-          <div style={{ margin: '10px auto', maxWidth: '450px', padding: '12px', background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '8px', textAlign: 'center' }}>
-            <div style={{ fontSize: '12px', color: '#eab308', marginBottom: '4px' }}>Challenge Code</div>
-            <div style={{ fontSize: '28px', fontFamily: 'monospace', color: '#eab308', fontWeight: 'bold', letterSpacing: '6px' }}>{challengeData.code}</div>
-            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Share this code with a friend to play the same season!</div>
+          <div style={{ margin: '0 auto 16px', maxWidth: '480px', padding: '14px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '12px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#eab308', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Challenge Code</div>
+            <div style={{ fontSize: '32px', fontFamily: 'monospace', color: '#eab308', fontWeight: 'bold', letterSpacing: '8px' }}>{challengeData.code}</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '6px' }}>Share this code — your friend plays the exact same season</div>
           </div>
         )}
 
-        {/* High score / rank detection */}
-        {score && (() => {
-          const modeBoard = getLeaderboardByMode(diff.name);
-          const rank = modeBoard.findIndex(e => e.overallScore <= score.overall);
-          const isNewHigh = modeBoard.length === 0 || score.overall > (modeBoard[0]?.overallScore || 0);
-          return (
-            <div style={{ textAlign: 'center', margin: '10px 0' }}>
-              {isNewHigh && (
-                <div style={{ fontSize: '20px', fontFamily: 'Fredoka One', color: '#eab308', marginBottom: '4px', animation: 'bounce 0.5s ease' }}>
-                  New High Score for {diff.name}!
-                </div>
-              )}
-              <p style={{ color: '#94a3b8', fontSize: '12px' }}>
-                Rank #{rank === -1 ? modeBoard.length + 1 : rank + 1} in {diff.name} leaderboard
-              </p>
-            </div>
-          );
-        })()}
-        <p style={{ color: '#64748b', fontSize: '12px', margin: '5px 0 5px' }}>Score saved to leaderboard!</p>
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
-          {challengeData?.code && onChallengeComplete && (
-            <button className="start-btn" onClick={() => {
-              const resultData = {
-                overallScore: score.overall, overallGrade: score.overallGrade,
-                profitMargin: score.metrics.profitMargin, overheadRatio: score.metrics.overheadRatio,
-                finalCash: gameState.cash, finalPatients: gameState.patients,
-                finalReputation: gameState.reputation, staffCount: gameState.staff.length,
-                insuranceCount: (gameState.acceptedInsurance || []).length,
-                playerName: challengeData.playerName,
-                feedback: generateSeasonFeedback(gameState, stats, diff),
-              };
-              onChallengeComplete(resultData);
-            }} style={{ borderColor: '#eab308' }}>
-              <span className="btn-icon">🏆</span>
-              <div><div className="btn-title">View Challenge Results</div><div className="btn-desc">Compare with your friend</div></div>
-            </button>
-          )}
-          <button className="start-btn" onClick={() => window.location.reload()}>
-            <span className="btn-icon">🔄</span>
-            <div><div className="btn-title">Play Again</div></div>
-          </button>
-        </div>
+        {/* ── RANK & SAVE CONFIRMATION ── */}
+        <p style={{ color: '#475569', fontSize: '11px', textAlign: 'center', margin: '8px 0 16px' }}>Score saved to leaderboard</p>
 
-        {/* Consultation CTA */}
-        <div style={{ margin: '20px auto', maxWidth: '450px', padding: '16px', background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(59,130,246,0.08))', border: '1px solid rgba(34,197,94,0.25)', borderRadius: '12px', textAlign: 'center' }}>
-          <div style={{ fontSize: '15px', fontWeight: 'bold', color: '#22c55e', marginBottom: '6px' }}>🎓 Want Real Practice Advice?</div>
-          <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, marginBottom: '10px' }}>
-            Think you can run a real dental practice? Book a one-on-one consultation with an experienced dental practice management consultant. Get personalized advice on startup strategy, insurance credentialing, staff hiring, and growth planning.
-          </p>
-          <a href="mailto:consult@dentaltycoon.com?subject=Practice%20Consultation%20Request&body=I%20just%20finished%20a%20season%20of%20Dental%20Tycoon%20and%20would%20like%20to%20discuss%20real%20practice%20management."
-            style={{ display: 'inline-block', padding: '10px 24px', background: 'rgba(34,197,94,0.2)', border: '1px solid rgba(34,197,94,0.4)', borderRadius: '8px', color: '#22c55e', fontWeight: 'bold', fontSize: '13px', textDecoration: 'none', cursor: 'pointer' }}>
-            Book a Consultation →
-          </a>
-          <div style={{ fontSize: '10px', color: '#64748b', marginTop: '6px' }}>Limited spots available</div>
-        </div>
-
-        {/* Challenge mode promo if not already in challenge */}
-        {!challengeData?.code && (
-          <div style={{ margin: '10px auto', maxWidth: '450px', padding: '12px', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '8px', textAlign: 'center' }}>
-            <div style={{ fontSize: '13px', color: '#eab308', fontWeight: 'bold' }}>🏆 Think you're good? Prove it.</div>
-            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0' }}>Challenge a friend to play the exact same season. Same events, same market — different decisions. Who runs the better practice?</p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (isGameOver) {
-    const feedback = generateSeasonFeedback(gameState, stats, diff);
-    return (
-      <div className="game-over">
-        <h1>PRACTICE CLOSED</h1>
-        <p>Your practice went bankrupt on Day {gameState.day} of {gameState.gameDuration || diff.gameDuration}.</p>
-        <p>Final debt: ${Math.abs(gameState.cash).toLocaleString()}</p>
-        <p style={{ color: '#64748b', fontSize: '14px' }}>Difficulty: {diff.icon} {diff.name} | Overdraft limit: -${Math.abs(diff.overdraftLimit / 1000).toFixed(0)}K</p>
-        {score && (
-          <div style={{ margin: '20px auto', maxWidth: '400px' }}>
-            <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-              <div style={{ fontSize: '2.5rem', fontFamily: 'Fredoka One', color: score.overallColor }}>{score.overall}</div>
-              <div style={{ fontSize: '0.9rem', color: score.overallColor }}>/ 1000 — {score.overallGrade}</div>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
-              {Object.entries(score.categories).map(([key, cat]) => (
-                <div key={key} style={{ padding: '3px 8px', background: 'rgba(30,41,59,0.5)', borderRadius: '4px', fontSize: '11px' }}>
-                  <span>{cat.icon}</span> <span style={{ color: cat.color, fontWeight: 'bold' }}>{cat.grade}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {/* What went wrong */}
-        {feedback.length > 0 && (
-          <div style={{ margin: '15px auto', maxWidth: '400px', textAlign: 'left' }}>
-            <h3 style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '6px' }}>What Went Wrong</h3>
-            {feedback.filter(f => f.type === 'weakness' || f.type === 'tip').slice(0, 4).map((fb, i) => (
-              <div key={i} style={{ padding: '6px 8px', marginBottom: '3px', background: 'rgba(30,41,59,0.4)', borderRadius: '4px', borderLeft: '3px solid #ef4444', fontSize: '11px', color: '#94a3b8' }}>
-                <strong style={{ color: '#ef4444' }}>{fb.area}:</strong> {fb.text}
-              </div>
-            ))}
-          </div>
-        )}
-        {/* Decision Replay (Game Over) */}
-        {gameState.decisionHistory && gameState.decisionHistory.length > 0 && (
-          <div style={{ margin: '12px auto', maxWidth: '400px', textAlign: 'left' }}>
-            <h3 style={{ color: '#eab308', fontSize: '13px', marginBottom: '6px', textAlign: 'center' }}>Your Decisions</h3>
-            {gameState.decisionHistory.map((d, i) => (
-              <div key={i} style={{ padding: '8px', marginBottom: '4px', background: 'rgba(30,41,59,0.4)', borderRadius: '6px', borderLeft: '3px solid #eab308' }}>
-                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#e2e8f0' }}>{d.chosenIcon} {d.title} <span style={{ color: '#64748b', fontWeight: 'normal', fontSize: '10px' }}>Day {d.day}</span></div>
-                <div style={{ fontSize: '11px', color: '#3b82f6' }}>Chose: {d.chosenLabel}</div>
-                <div style={{ fontSize: '10px', color: '#94a3b8' }}>{d.consequence}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        {challengeData?.code && (
-          <div style={{ margin: '10px auto', padding: '10px', background: 'rgba(234,179,8,0.1)', borderRadius: '8px', textAlign: 'center', maxWidth: '400px' }}>
-            <div style={{ fontSize: '11px', color: '#eab308' }}>Challenge: <strong style={{ fontFamily: 'monospace', letterSpacing: '3px' }}>{challengeData.code}</strong></div>
-          </div>
-        )}
-        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '10px', flexWrap: 'wrap' }}>
+        {/* ── ACTION BUTTONS ── */}
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', margin: '0 auto 20px', maxWidth: '480px' }}>
           {challengeData?.code && onChallengeComplete && score && (
             <button className="start-btn" onClick={() => {
               onChallengeComplete({
@@ -4847,26 +5149,45 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
                 finalCash: gameState.cash, finalPatients: gameState.patients,
                 finalReputation: gameState.reputation, staffCount: gameState.staff.length,
                 insuranceCount: (gameState.acceptedInsurance || []).length,
-                playerName: challengeData.playerName, feedback,
+                playerName: challengeData.playerName,
+                feedback,
               });
             }} style={{ borderColor: '#eab308' }}>
               <span className="btn-icon">🏆</span>
-              <div><div className="btn-title">Challenge Results</div></div>
+              <div><div className="btn-title">Challenge Results</div><div className="btn-desc">Compare scores</div></div>
             </button>
           )}
-          <button className="start-btn" onClick={() => window.location.reload()}>Try Again</button>
+          <button className="start-btn" onClick={() => window.location.reload()}>
+            <span className="btn-icon">🔄</span>
+            <div><div className="btn-title">{isBankrupt ? 'Try Again' : 'Play Again'}</div><div className="btn-desc">New season</div></div>
+          </button>
         </div>
 
-        {/* Consultation CTA */}
-        <div style={{ margin: '20px auto', maxWidth: '400px', padding: '14px', background: 'linear-gradient(135deg, rgba(239,68,68,0.06), rgba(59,130,246,0.08))', border: '1px solid rgba(59,130,246,0.25)', borderRadius: '12px', textAlign: 'center' }}>
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '6px' }}>📞 Learn From the Pros</div>
+        {/* ── CHALLENGE PROMO (if not in challenge mode) ── */}
+        {!challengeData?.code && (
+          <div style={{ margin: '0 auto 16px', maxWidth: '480px', padding: '14px', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '12px', textAlign: 'center' }}>
+            <div style={{ fontSize: '14px', color: '#eab308', fontWeight: 'bold', marginBottom: '4px' }}>Think you're good? Prove it.</div>
+            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0', lineHeight: 1.5 }}>Challenge a friend to play the exact same season — same events, same market, different decisions. Share a code and compare who runs the better practice.</p>
+          </div>
+        )}
+
+        {/* ── FEEDBACK / CONTACT (anonymous) ── */}
+        <div style={{ margin: '0 auto 16px', maxWidth: '480px', padding: '14px', background: 'linear-gradient(135deg, rgba(34,197,94,0.06), rgba(59,130,246,0.06))', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '12px', textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#22c55e', marginBottom: '6px' }}>Have feedback? Ideas? Found a bug?</div>
           <p style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5, marginBottom: '10px' }}>
-            Practice management is hard — even in a game. Book a consultation with a dental practice management expert and learn what it really takes to succeed.
+            Help make Dental Tycoon better. We read every message.
           </p>
-          <a href="mailto:consult@dentaltycoon.com?subject=Practice%20Consultation%20Request&body=I%20played%20Dental%20Tycoon%20and%20want%20to%20learn%20more%20about%20real%20practice%20management."
-            style={{ display: 'inline-block', padding: '8px 20px', background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '8px', color: '#60a5fa', fontWeight: 'bold', fontSize: '12px', textDecoration: 'none', cursor: 'pointer' }}>
-            Book a Consultation →
-          </a>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a href={`mailto:feedback@dentaltycoon.com?subject=${encodeURIComponent(`Dental Tycoon Feedback [${score ? score.overallGrade : 'N/A'}]`)}&body=${encodeURIComponent(`Score: ${score ? score.overall : 'N/A'}/1000\nDifficulty: ${diff.name}\nOutcome: ${isBankrupt ? 'Bankrupt' : isDsoSold ? 'DSO Sale' : 'Completed'}\n\n--- My feedback ---\n\n`)}`}
+              style={{ display: 'inline-block', padding: '8px 20px', background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: '8px', color: '#22c55e', fontWeight: 'bold', fontSize: '12px', textDecoration: 'none' }}>
+              Send Feedback
+            </a>
+            <a href={`mailto:consult@dentaltycoon.com?subject=${encodeURIComponent('Practice Consultation Request')}&body=${encodeURIComponent('I just played Dental Tycoon and would like to discuss real dental practice management.\n\n')}`}
+              style={{ display: 'inline-block', padding: '8px 20px', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', color: '#60a5fa', fontWeight: 'bold', fontSize: '12px', textDecoration: 'none' }}>
+              Get Real Advice
+            </a>
+          </div>
+          <div style={{ fontSize: '10px', color: '#475569', marginTop: '8px' }}>Your email is only used to reply — we never share it</div>
         </div>
       </div>
     );
@@ -5174,6 +5495,10 @@ export default function App() {
   if (screen === 'setup') return <SetupPhaseScreen buildoutData={buildoutData} difficulty={difficulty} onComplete={handleSetupComplete} onBack={() => setScreen('buildout')} />;
   if (screen === 'acquire') return <AcquireScreen difficulty={difficulty} onSelect={handleAcquirePick} onBack={() => setScreen('difficulty')} />;
   if (screen === 'fixWindow') return <FixWindowScreen practice={acquisitionChoice} difficulty={difficulty} onComplete={handleFixWindowComplete} onBack={() => setScreen('acquire')} />;
-  return <GameScreen startMode={startMode} acquisitionChoice={acquisitionChoice} fixWindowData={fixWindowData} buildoutData={buildoutData} difficulty={difficulty}
-    challengeData={challengeData} onChallengeComplete={(result) => { setChallengeResult(result); setScreen('challengeCompare'); }} />;
+  return (
+    <GameErrorBoundary>
+      <GameScreen startMode={startMode} acquisitionChoice={acquisitionChoice} fixWindowData={fixWindowData} buildoutData={buildoutData} difficulty={difficulty}
+        challengeData={challengeData} onChallengeComplete={(result) => { setChallengeResult(result); setScreen('challengeCompare'); }} />
+    </GameErrorBoundary>
+  );
 }
