@@ -4846,6 +4846,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
   // Stop game when season ends or goes bankrupt
   useEffect(() => {
     if ((isGameOver || isSeasonComplete) && gameState.speed !== 0) {
+      console.log('[DENTAL TYCOON] Game ended!', { isGameOver, isSeasonComplete, day: gameState.day, cash: gameState.cash, gameDuration: gameState.gameDuration || diff.gameDuration });
       setGameState(prev => ({ ...prev, speed: 0 }));
     }
   }, [isGameOver, isSeasonComplete]);
@@ -4889,6 +4890,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
   const isEndScreen = (isSeasonComplete && !isGameOver) || isGameOver;
 
   if (isEndScreen) {
+    console.log('[DENTAL TYCOON] Rendering end screen', { isGameOver, isSeasonComplete, isDsoSold, scoreAvailable: !!score, day: gameState.day });
     const isBankrupt = isGameOver;
     const feedback = generateSeasonFeedback(gameState, stats, diff);
     const modeBoard = score ? getLeaderboardByMode(diff.name) : [];
@@ -5136,11 +5138,106 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           </div>
         )}
 
+        {/* ── PROFIT & LOSS STATEMENT ── */}
+        {score && (
+          <div style={{ margin: '0 auto 20px', maxWidth: '480px' }}>
+            <h3 style={{ color: '#64748b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '10px' }}>Profit & Loss Statement</h3>
+            <div style={{ background: 'rgba(30,41,59,0.5)', borderRadius: '10px', padding: '14px', border: '1px solid rgba(148,163,184,0.1)' }}>
+              {/* Revenue */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Revenue</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Total Season Revenue</span>
+                  <span style={{ color: '#22c55e', fontWeight: 600 }}>${(gameState.totalRevenue || 0).toLocaleString()}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Monthly Run Rate</span>
+                  <span style={{ color: '#22c55e' }}>${Math.round(score.metrics.monthlyRevenue).toLocaleString()}/mo</span>
+                </div>
+              </div>
+              <div style={{ height: '1px', background: 'rgba(148,163,184,0.15)', margin: '6px 0' }} />
+              {/* Expenses */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>Expenses</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Total Season Expenses</span>
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>-${(gameState.totalExpenses || 0).toLocaleString()}</span>
+                </div>
+                {(gameState.totalMarketingSpend || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0 2px 12px', fontSize: '11px' }}>
+                    <span style={{ color: '#64748b' }}>Marketing</span>
+                    <span style={{ color: '#94a3b8' }}>-${(gameState.totalMarketingSpend || 0).toLocaleString()}</span>
+                  </div>
+                )}
+                {(gameState.totalTrainingSpend || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0 2px 12px', fontSize: '11px' }}>
+                    <span style={{ color: '#64748b' }}>Training</span>
+                    <span style={{ color: '#94a3b8' }}>-${(gameState.totalTrainingSpend || 0).toLocaleString()}</span>
+                  </div>
+                )}
+                {(gameState.totalConsultantSpend || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0 2px 12px', fontSize: '11px' }}>
+                    <span style={{ color: '#64748b' }}>Consultants</span>
+                    <span style={{ color: '#94a3b8' }}>-${(gameState.totalConsultantSpend || 0).toLocaleString()}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '12px' }}>
+                  <span style={{ color: '#94a3b8' }}>Overhead Ratio</span>
+                  <span style={{ color: score.metrics.overheadRatio < 65 ? '#22c55e' : score.metrics.overheadRatio < 75 ? '#eab308' : '#ef4444' }}>{score.metrics.overheadRatio}%</span>
+                </div>
+              </div>
+              <div style={{ height: '2px', background: 'rgba(148,163,184,0.2)', margin: '6px 0' }} />
+              {/* Net */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: '14px', fontWeight: 'bold' }}>
+                <span style={{ color: '#e2e8f0' }}>Net Profit/Loss</span>
+                <span style={{ color: ((gameState.totalRevenue || 0) - (gameState.totalExpenses || 0)) >= 0 ? '#22c55e' : '#ef4444', fontFamily: 'Fredoka One' }}>
+                  {((gameState.totalRevenue || 0) - (gameState.totalExpenses || 0)) >= 0 ? '+' : ''}${((gameState.totalRevenue || 0) - (gameState.totalExpenses || 0)).toLocaleString()}
+                </span>
+              </div>
+              {/* Visual bar */}
+              {(gameState.totalRevenue || 0) > 0 && (
+                <div style={{ marginTop: '8px' }}>
+                  <div style={{ display: 'flex', gap: '2px', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ flex: Math.max(1, ((gameState.totalRevenue || 0) - (gameState.totalExpenses || 0))), background: '#22c55e', borderRadius: '6px 0 0 6px' }} title="Profit" />
+                    <div style={{ flex: Math.max(1, gameState.totalExpenses || 0), background: '#ef4444', borderRadius: '0 6px 6px 0' }} title="Expenses" />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#64748b', marginTop: '2px' }}>
+                    <span>Profit: {Math.round(((gameState.totalRevenue || 1) - (gameState.totalExpenses || 0)) / (gameState.totalRevenue || 1) * 100)}%</span>
+                    <span>Expenses: {Math.round((gameState.totalExpenses || 0) / (gameState.totalRevenue || 1) * 100)}%</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── RANK & SAVE CONFIRMATION ── */}
         <p style={{ color: '#475569', fontSize: '11px', textAlign: 'center', margin: '8px 0 16px' }}>Score saved to leaderboard</p>
 
         {/* ── ACTION BUTTONS ── */}
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap', margin: '0 auto 20px', maxWidth: '480px' }}>
+          {/* Challenge a Friend — share button with clipboard copy */}
+          <button className="start-btn" onClick={() => {
+            const shareCode = challengeData?.code || generateChallengeCode();
+            const shareScore = score ? score.overall : 0;
+            const shareGrade = score ? score.overallGrade : 'N/A';
+            const shareText = `I scored ${shareScore.toLocaleString()}/1000 (${shareGrade}) on Dental Tycoon! Can you beat me? Challenge code: ${shareCode} — play at dentaltycoon.com`;
+            if (navigator.share) {
+              navigator.share({ title: 'Dental Tycoon Challenge', text: shareText }).catch(() => {});
+            } else if (navigator.clipboard) {
+              navigator.clipboard.writeText(shareText).then(() => {
+                alert('Challenge copied to clipboard! Send it to a friend.');
+              }).catch(() => {
+                prompt('Copy this challenge:', shareText);
+              });
+            } else {
+              prompt('Copy this challenge:', shareText);
+            }
+          }} style={{ borderColor: '#eab308', background: 'rgba(234,179,8,0.08)' }}>
+            <span className="btn-icon">🏆</span>
+            <div><div className="btn-title" style={{ color: '#eab308' }}>Challenge a Friend</div><div className="btn-desc">Share your score</div></div>
+          </button>
+
           {challengeData?.code && onChallengeComplete && score && (
             <button className="start-btn" onClick={() => {
               onChallengeComplete({
@@ -5152,24 +5249,22 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
                 playerName: challengeData.playerName,
                 feedback,
               });
-            }} style={{ borderColor: '#eab308' }}>
-              <span className="btn-icon">🏆</span>
-              <div><div className="btn-title">Challenge Results</div><div className="btn-desc">Compare scores</div></div>
+            }} style={{ borderColor: '#a78bfa' }}>
+              <span className="btn-icon">📊</span>
+              <div><div className="btn-title">View Results</div><div className="btn-desc">Compare scores</div></div>
             </button>
           )}
+
           <button className="start-btn" onClick={() => window.location.reload()}>
             <span className="btn-icon">🔄</span>
             <div><div className="btn-title">{isBankrupt ? 'Try Again' : 'Play Again'}</div><div className="btn-desc">New season</div></div>
           </button>
-        </div>
 
-        {/* ── CHALLENGE PROMO (if not in challenge mode) ── */}
-        {!challengeData?.code && (
-          <div style={{ margin: '0 auto 16px', maxWidth: '480px', padding: '14px', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '12px', textAlign: 'center' }}>
-            <div style={{ fontSize: '14px', color: '#eab308', fontWeight: 'bold', marginBottom: '4px' }}>Think you're good? Prove it.</div>
-            <p style={{ fontSize: '11px', color: '#94a3b8', margin: '4px 0', lineHeight: 1.5 }}>Challenge a friend to play the exact same season — same events, same market, different decisions. Share a code and compare who runs the better practice.</p>
-          </div>
-        )}
+          <button className="start-btn" onClick={() => window.location.href = '/'} style={{ borderColor: '#64748b' }}>
+            <span className="btn-icon">🏠</span>
+            <div><div className="btn-title">Back to Home</div><div className="btn-desc">Main menu</div></div>
+          </button>
+        </div>
 
         {/* ── FEEDBACK / CONTACT (anonymous) ── */}
         <div style={{ margin: '0 auto 16px', maxWidth: '480px', padding: '14px', background: 'linear-gradient(135deg, rgba(34,197,94,0.06), rgba(59,130,246,0.06))', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '12px', textAlign: 'center' }}>
