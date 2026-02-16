@@ -56,9 +56,9 @@ h1, h2, h3, h4 { font-family: 'Fredoka One', cursive; }
 
 /* ═══ GAME OVER ═══ */
 .game-over {
-  min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center;
   background: linear-gradient(135deg, #1a0a0a 0%, #2d1111 50%, #1a0a0a 100%);
-  text-align: center;
+  text-align: center; overflow-y: auto; padding: 40px 20px;
 }
 .game-over h1 { font-size: 48px; color: #ef4444; margin-bottom: 16px; }
 .game-over p { color: #94a3b8; font-size: 18px; margin-bottom: 8px; }

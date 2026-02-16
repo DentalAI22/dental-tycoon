@@ -25,7 +25,7 @@ import {
 // ═══════════════════════════════════════════════════════
 // TITLE SCREEN
 // ═══════════════════════════════════════════════════════
-function TitleScreen({ onStart, onChallenge }) {
+function TitleScreen({ onStart, onChallenge, onLeaderboard }) {
   return (
     <div className="title-screen">
       <div className="title-content">
@@ -60,6 +60,15 @@ function TitleScreen({ onStart, onChallenge }) {
             </div>
             <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#eab308', color: '#0a1628', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>COMPETE</span>
           </button>
+
+          {/* Leaderboard */}
+          <button className="start-btn" onClick={() => onLeaderboard()} style={{ borderColor: '#a78bfa', background: 'rgba(167,139,250,0.06)' }}>
+            <span className="btn-icon">🏆</span>
+            <div>
+              <div className="btn-title" style={{ color: '#a78bfa' }}>Leaderboard</div>
+              <div className="btn-desc">See today's top scores, this week's leaders, and the all-time best. Can you claim #1?</div>
+            </div>
+          </button>
         </div>
 
         {/* Season feedback promo */}
@@ -70,6 +79,127 @@ function TitleScreen({ onStart, onChallenge }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// LEADERBOARD SCREEN (from title)
+// ═══════════════════════════════════════════════════════
+function LeaderboardScreen({ onBack }) {
+  const [tab, setTab] = useState('all');
+  const board = getLeaderboard();
+
+  const now = Date.now();
+  const ONE_DAY = 24 * 60 * 60 * 1000;
+  const ONE_WEEK = 7 * ONE_DAY;
+
+  const filtered = tab === 'all' ? board
+    : tab === 'daily' ? board.filter(e => e.date && (now - new Date(e.date).getTime()) < ONE_DAY)
+    : tab === 'weekly' ? board.filter(e => e.date && (now - new Date(e.date).getTime()) < ONE_WEEK)
+    : board;
+
+  const modes = getLeaderboardModes();
+
+  const gradeColor = (grade) => {
+    if (!grade) return '#94a3b8';
+    if (grade.startsWith('A')) return '#22c55e';
+    if (grade.startsWith('B')) return '#3b82f6';
+    if (grade.startsWith('C')) return '#eab308';
+    if (grade.startsWith('D')) return '#f97316';
+    return '#ef4444';
+  };
+
+  return (
+    <div className="acquire-screen" style={{ textAlign: 'center' }}>
+      <h2 className="acquire-title">Leaderboard</h2>
+      <p className="acquire-sub">Top scores across all players on this device</p>
+
+      {/* Time filter tabs */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        {[
+          { id: 'all', label: 'All Time' },
+          { id: 'weekly', label: 'This Week' },
+          { id: 'daily', label: 'Today' },
+        ].map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{
+            padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+            background: tab === t.id ? 'rgba(59,130,246,0.2)' : 'rgba(30,41,59,0.6)',
+            border: `1px solid ${tab === t.id ? 'rgba(59,130,246,0.5)' : 'rgba(100,116,139,0.2)'}`,
+            color: tab === t.id ? '#60a5fa' : '#94a3b8',
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* Leaderboard table */}
+      <div style={{ maxWidth: '550px', margin: '0 auto' }}>
+        {filtered.length === 0 ? (
+          <div style={{ padding: '40px 20px', color: '#64748b', fontStyle: 'italic' }}>
+            <div style={{ fontSize: '40px', marginBottom: '12px' }}>🏆</div>
+            <div style={{ fontSize: '15px', marginBottom: '6px' }}>No scores yet{tab !== 'all' ? ` for ${tab === 'daily' ? 'today' : 'this week'}` : ''}</div>
+            <div style={{ fontSize: '12px' }}>Complete a season to land on the leaderboard!</div>
+          </div>
+        ) : (
+          filtered.slice(0, 20).map((entry, i) => (
+            <div key={entry.id || i} style={{
+              display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', marginBottom: '6px',
+              background: i === 0 ? 'rgba(234,179,8,0.08)' : i === 1 ? 'rgba(192,192,192,0.05)' : i === 2 ? 'rgba(205,127,50,0.05)' : 'rgba(30,41,59,0.4)',
+              border: `1px solid ${i === 0 ? 'rgba(234,179,8,0.3)' : i === 1 ? 'rgba(192,192,192,0.2)' : i === 2 ? 'rgba(205,127,50,0.2)' : 'rgba(148,163,184,0.08)'}`,
+              borderRadius: '10px', textAlign: 'left',
+            }}>
+              {/* Rank */}
+              <div style={{ fontSize: i < 3 ? '20px' : '14px', fontWeight: 'bold', color: i === 0 ? '#eab308' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#64748b', minWidth: '30px', textAlign: 'center' }}>
+                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+              </div>
+
+              {/* Score + Grade */}
+              <div style={{ minWidth: '60px', textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontFamily: 'Fredoka One', color: gradeColor(entry.overallGrade) }}>{entry.overallScore || 0}</div>
+                <div style={{ fontSize: '11px', color: gradeColor(entry.overallGrade), fontWeight: 'bold' }}>{entry.overallGrade || '—'}</div>
+              </div>
+
+              {/* Details */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '12px', color: '#e2e8f0', fontWeight: 600 }}>
+                  {entry.difficulty || 'Unknown'} · {entry.outcome === 'Bankrupt' ? '💀 Bankrupt' : '✅ Completed'}
+                </div>
+                <div style={{ fontSize: '11px', color: '#64748b', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <span>Day {entry.day || '?'}</span>
+                  <span>{entry.finalPatients || entry.patients || 0} pts</span>
+                  <span>${(entry.finalCash || 0).toLocaleString()}</span>
+                  {entry.finalReputation && <span>{Number(entry.finalReputation).toFixed(1)}⭐</span>}
+                </div>
+              </div>
+
+              {/* Date */}
+              <div style={{ fontSize: '10px', color: '#475569', textAlign: 'right', minWidth: '50px' }}>
+                {entry.date ? new Date(entry.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Difficulty breakdown */}
+      {modes.length > 1 && tab === 'all' && (
+        <div style={{ maxWidth: '550px', margin: '20px auto 0' }}>
+          <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>Best by Difficulty</div>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {modes.map(mode => {
+              const best = getLeaderboardByMode(mode)[0];
+              if (!best) return null;
+              return (
+                <div key={mode} style={{ padding: '8px 14px', background: 'rgba(30,41,59,0.6)', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.1)' }}>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>{mode}</div>
+                  <div style={{ fontSize: '16px', fontFamily: 'Fredoka One', color: gradeColor(best.overallGrade) }}>{best.overallScore}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      <button className="back-btn" onClick={onBack}>← Back to Menu</button>
     </div>
   );
 }
@@ -3729,6 +3859,11 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
   // Patient animation system
   const advanceDay = useCallback(() => {
     setGameState(prev => {
+      // Guard: stop processing if season is over or bankrupt
+      const seasonDone = prev.day >= (prev.gameDuration || diff.gameDuration);
+      const bankrupt = prev.cash < diff.overdraftLimit;
+      if (seasonDone || bankrupt) return prev;
+
       const s = calculateDailyStats(prev);
       const newLog = [...prev.log];
       let cashDelta = s.dailyProfit;
@@ -4331,6 +4466,13 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
     }
   }, [gameState.cash]);
 
+  // Stop game when season ends or goes bankrupt
+  useEffect(() => {
+    if ((isGameOver || isSeasonComplete) && gameState.speed !== 0) {
+      setGameState(prev => ({ ...prev, speed: 0 }));
+    }
+  }, [isGameOver, isSeasonComplete]);
+
   // Auto-save to leaderboard (and challenge) on game end
   useEffect(() => {
     if ((isGameOver || isSeasonComplete) && score && !savedEndRef.current) {
@@ -4410,6 +4552,13 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           </>
         )}
         <p style={{ color: '#64748b', fontSize: '14px' }}>Difficulty: {diff.icon} {diff.name}</p>
+        {!score && (
+          <div style={{ margin: '20px auto', padding: '16px', background: 'rgba(30,41,59,0.5)', borderRadius: '10px', maxWidth: '400px' }}>
+            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Final Cash: <strong style={{ color: gameState.cash > 0 ? '#22c55e' : '#ef4444' }}>${gameState.cash.toLocaleString()}</strong></div>
+            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Patients: <strong>{gameState.patients}</strong> · Rating: <strong>{gameState.reputation.toFixed(1)}⭐</strong></div>
+            <div style={{ fontSize: '14px', color: '#94a3b8' }}>Staff: <strong>{gameState.staff.length}</strong> · Day: <strong>{gameState.day}</strong></div>
+          </div>
+        )}
         {score && (
           <div style={{ margin: '20px auto', maxWidth: '500px', textAlign: 'left' }}>
             {/* Big Score Display */}
@@ -4942,7 +5091,8 @@ export default function App() {
   };
 
   // ── SCREEN RENDERING ROUTER ──
-  if (screen === 'title') return <TitleScreen onStart={handleStart} onChallenge={handleChallenge} />;
+  if (screen === 'title') return <TitleScreen onStart={handleStart} onChallenge={handleChallenge} onLeaderboard={() => setScreen('leaderboard')} />;
+  if (screen === 'leaderboard') return <LeaderboardScreen onBack={() => setScreen('title')} />;
   if (screen === 'challengeSetup') return <ChallengeSetupScreen onStartChallenge={handleStartChallenge} onJoinChallenge={handleJoinChallenge} onBack={() => setScreen('title')} />;
   if (screen === 'challengeCompare') return <ChallengeCompareScreen challengeCode={challengeData?.code} myResult={challengeResult} onBack={() => { setChallengeData(null); setChallengeResult(null); setScreen('title'); }} />;
   if (screen === 'difficulty') return <DifficultySelectionScreen onSelect={handleDifficultySelect} onBack={() => setScreen('title')} />;
