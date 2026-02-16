@@ -1456,17 +1456,19 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
             <p className="practice-desc">{option.story}</p>
             <div className="practice-stats">
               <div className="pstat"><span className="pstat-label">Price</span><span className="pstat-val">${(option.price / 1000).toFixed(0)}K</span></div>
-              <div className="pstat"><span className="pstat-label">Patients</span><span className="pstat-val">{option.patients}</span></div>
+              <div className="pstat"><span className="pstat-label">Patients</span><span className="pstat-val">{option.patients}{option.attritionHit > 0 ? ` (was ${option.statedPatients})` : ''}</span></div>
               <div className="pstat"><span className="pstat-label">Rating</span><span className="pstat-val">{option.reputation.toFixed(1)} ⭐</span></div>
               <div className="pstat"><span className="pstat-label">Staff</span><span className="pstat-val">{option.staff.length}</span></div>
               <div className="pstat"><span className="pstat-label">Monthly Rev</span><span className="pstat-val">${(option.monthlyRevenue / 1000).toFixed(0)}K</span></div>
               <div className="pstat"><span className="pstat-label">Cleanliness</span><span className="pstat-val">{option.cleanliness}/100</span></div>
               <div className="pstat"><span className="pstat-label">Sqft</span><span className="pstat-val">{option.sqft.toLocaleString()}</span></div>
               <div className="pstat"><span className="pstat-label">Rent</span><span className="pstat-val red">${option.rent.toLocaleString()}/mo</span></div>
+              <div className="pstat"><span className="pstat-label">Operatories</span><span className="pstat-val">{option.actualOps || option.maxOps}</span></div>
+              <div className="pstat"><span className="pstat-label">Sqft/Op</span><span className="pstat-val" style={{ color: (option.sqftPerOp || 500) > 550 ? '#ef4444' : (option.sqftPerOp || 500) > 450 ? '#eab308' : '#22c55e' }}>{option.sqftPerOp || Math.round(option.sqft / (option.actualOps || option.maxOps))}</span></div>
             </div>
-            {option.existingDebt > 0 && (
-              <div style={{ marginTop: '6px', fontSize: '11px', color: '#ef4444', fontWeight: 600 }}>
-                + ${(option.existingDebt / 1000).toFixed(0)}K existing debt included
+            {option.attritionHit > 0 && (
+              <div style={{ marginTop: '6px', fontSize: '11px', color: '#eab308', fontWeight: 600 }}>
+                ⚠ ~{option.attritionHit} patients expected to leave during ownership transition
               </div>
             )}
             <button className="buy-btn" style={{ width: '100%', marginTop: '12px', padding: '10px', fontSize: '14px', fontWeight: 700 }}
@@ -1491,7 +1493,7 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
 // ═══════════════════════════════════════════════════════
 function FixWindowScreen({ practice, difficulty, onComplete, onBack }) {
   const loanAmount = difficulty.loanAmount;
-  const totalDebt = practice.price + (practice.existingDebt || 0) + loanAmount;
+  const totalDebt = loanAmount; // asset purchase — you owe the bank for the loan, that's it
   const startingCash = loanAmount - practice.price;
 
   const [cash, setCash] = useState(startingCash);

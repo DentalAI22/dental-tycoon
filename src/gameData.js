@@ -1912,21 +1912,21 @@ export const ACQUISITION_OPTIONS = [
   {
     id: 'small', name: 'Small Solo Practice', price: 250000,
     description: 'A small practice with 2 operatories, aging equipment, and a small patient base. The previous dentist retired.',
-    patients: 80, reputation: 3.2, sqft: 1200, rent: 3000,
+    patients: 80, reputation: 3.2, sqft: 900, rent: 2500, actualOps: 2, sqftPerOp: 450, maxOps: 2,
     equipment: ['basic_chair', 'basic_chair', 'xray', 'sterilizer'],
     builtOutRooms: ['basic_ops', 'basic_ops', 'waiting_area', 'sterilization'],
     staff: [
       { role: 'Front Desk', skill: 45, attitude: 70, reliability: 60 },
       { role: 'Dental Assistant', skill: 55, attitude: 50, reliability: 65 },
     ],
-    monthlyRevenue: 25000, insurances: ['delta'],
+    monthlyRevenue: 25000, insurances: ['delta'], problems: [],
     relationships: { supply_rep: 50, equipment_tech: 40, referring_docs: 30, lab: 55, landlord: 60 },
-    cleanliness: 55,
+    cleanliness: 55, existingDebt: 0,
   },
   {
     id: 'medium', name: 'Growing Family Practice', price: 500000,
     description: 'A well-run family practice with 4 operatories, decent equipment, and solid reviews. Owner is relocating.',
-    patients: 250, reputation: 4.1, sqft: 2200, rent: 5500,
+    patients: 250, reputation: 4.1, sqft: 1800, rent: 5000, actualOps: 4, sqftPerOp: 450, maxOps: 4,
     equipment: ['basic_chair', 'basic_chair', 'premium_chair', 'premium_chair', 'xray', 'panoramic_xray', 'sterilizer'],
     builtOutRooms: ['basic_ops', 'basic_ops', 'premium_ops', 'premium_ops', 'waiting_area', 'sterilization', 'xray_room', 'break_room'],
     staff: [
@@ -1935,14 +1935,14 @@ export const ACQUISITION_OPTIONS = [
       { role: 'Dental Assistant', skill: 60, attitude: 70, reliability: 70 },
       { role: 'Dental Assistant', skill: 50, attitude: 60, reliability: 55 },
     ],
-    monthlyRevenue: 55000, insurances: ['delta', 'cigna'],
+    monthlyRevenue: 55000, insurances: ['delta', 'cigna'], problems: [],
     relationships: { supply_rep: 65, equipment_tech: 60, referring_docs: 55, lab: 70, landlord: 65 },
-    cleanliness: 70,
+    cleanliness: 70, existingDebt: 0,
   },
   {
     id: 'large', name: 'Established Multi-Doctor Practice', price: 900000,
-    description: 'A large practice with 6 operatories, modern equipment, and a strong patient base. But the staff has morale issues and cleanliness has slipped.',
-    patients: 500, reputation: 3.8, sqft: 3500, rent: 9000,
+    description: 'A large practice with 6 operatories but way too much space. Staff has morale issues and cleanliness has slipped.',
+    patients: 500, reputation: 3.8, sqft: 3500, rent: 9000, actualOps: 6, sqftPerOp: 583, maxOps: 8,
     equipment: ['premium_chair','premium_chair','premium_chair','premium_chair','basic_chair','basic_chair','panoramic_xray','xray','sterilizer','laser','autoclave'],
     builtOutRooms: ['premium_ops','premium_ops','premium_ops','premium_ops','basic_ops','basic_ops','premium_waiting','sterilization','xray_room','lab','break_room','private_office'],
     staff: [
@@ -1953,9 +1953,9 @@ export const ACQUISITION_OPTIONS = [
       { role: 'Dental Assistant', skill: 75, attitude: 45, reliability: 55 },
       { role: 'Dental Assistant', skill: 60, attitude: 60, reliability: 70 },
     ],
-    monthlyRevenue: 95000, insurances: ['delta', 'cigna', 'aetna'],
+    monthlyRevenue: 95000, insurances: ['delta', 'cigna', 'aetna'], problems: ['high_overhead', 'low_morale'],
     relationships: { supply_rep: 45, equipment_tech: 35, referring_docs: 60, lab: 50, landlord: 40 },
-    cleanliness: 45,
+    cleanliness: 45, existingDebt: 0,
   },
 ];
 
@@ -1963,16 +1963,18 @@ export const ACQUISITION_OPTIONS = [
 const PRACTICE_TYPES = ['Family Dentistry', 'Dental Group', 'Smile Center', 'Dental Associates', 'Oral Health Center'];
 
 const PROBLEM_POOL = [
-  { id: 'low_morale', label: 'Low Staff Morale', severity: 'warning', description: 'Staff morale is critically low.' },
-  { id: 'bad_reputation', label: 'Bad Reputation', severity: 'danger', description: 'Online reviews are terrible.' },
-  { id: 'equipment_outdated', label: 'Outdated Equipment', severity: 'warning', description: 'Only basic chairs, no diagnostic equipment.' },
-  { id: 'high_overhead', label: 'High Overhead', severity: 'warning', description: 'Rent and staffing costs are bloated.' },
-  { id: 'dirty_office', label: 'Dirty Office', severity: 'danger', description: 'The office is filthy. Patients notice.' },
-  { id: 'insurance_mess', label: 'Insurance Mess', severity: 'warning', description: 'Too many low-paying plans cannibalize revenue.' },
-  { id: 'staff_drama', label: 'Staff Drama', severity: 'danger', description: 'Key staff member about to quit, another is unskilled.' },
-  { id: 'debt_heavy', label: 'Heavy Debt', severity: 'danger', description: 'Previous owner left significant unpaid debts.' },
-  { id: 'no_marketing', label: 'Zero Marketing', severity: 'warning', description: 'No marketing — patient base is declining.' },
-  { id: 'embezzlement_aftermath', label: 'Embezzlement', severity: 'danger', description: 'Cash went missing. Trust is broken.' },
+  { id: 'low_morale', label: 'Low Staff Morale', severity: 'warning', description: 'Staff morale is critically low. They\'re skeptical of new ownership.' },
+  { id: 'bad_reputation', label: 'Bad Reputation', severity: 'danger', description: 'Online reviews are terrible. Rebuilding trust takes time and money.' },
+  { id: 'equipment_outdated', label: 'Outdated Equipment', severity: 'warning', description: 'Equipment is old and poorly maintained. Expect breakdowns and replacement costs.' },
+  { id: 'high_overhead', label: 'High Overhead', severity: 'warning', description: 'Bloated lease and too many staff for the patient count. The math doesn\'t work yet.' },
+  { id: 'dirty_office', label: 'Dirty Office', severity: 'danger', description: 'The office needs a deep clean. Patients notice and it shows in reviews.' },
+  { id: 'insurance_mess', label: 'Bad Insurance Mix', severity: 'warning', description: 'Loaded with low-reimbursement HMO plans at below-market fee schedules. Revenue per patient is terrible.' },
+  { id: 'staff_drama', label: 'Staff Loyalty Issues', severity: 'danger', description: 'Staff was loyal to the old doc — resistant to change, key person threatening to leave.' },
+  { id: 'patient_attrition', label: 'Patient Attrition Risk', severity: 'danger', description: 'Patients came for the old doctor, not the practice. Expect 20-40% to leave during transition.' },
+  { id: 'no_marketing', label: 'Zero Marketing', severity: 'warning', description: 'No marketing, no recall system, no follow-up. Patient base is shrinking every month.' },
+  { id: 'no_systems', label: 'No Systems in Place', severity: 'warning', description: 'No SOPs, no scheduling protocols, billing is a mess. Collections are poor — money left on the table.' },
+  { id: 'bad_lease', label: 'Bad Lease Terms', severity: 'warning', description: 'Locked into above-market lease with years remaining. Rent is eating your margins.' },
+  { id: 'embezzlement_aftermath', label: 'Embezzlement History', severity: 'danger', description: 'Cash went missing under previous ownership. Staff trust is shattered, financial records unreliable.' },
 ];
 
 const ACQUISITION_SCALING = {
@@ -2017,11 +2019,12 @@ function generatePracticeStaff(count, problems) {
   return staff;
 }
 
-function generatePracticeEquipment(sqft, problems) {
+// Real benchmarks: ~400-500 sqft per operatory (total practice / ops, including common areas)
+// Well-designed: 400 sqft/op | Average: 500 sqft/op | Poorly utilized: 650+ sqft/op
+function generatePracticeEquipment(sqft, problems, ops) {
   const outdated = problems.includes('equipment_outdated');
-  const ops = Math.max(2, Math.floor(sqft / 500));
   const equip = [];
-  for (let i = 0; i < ops; i++) equip.push('basic_chair');
+  for (let i = 0; i < ops; i++) equip.push(outdated || Math.random() < 0.4 ? 'basic_chair' : 'premium_chair');
   if (!outdated) {
     equip.push('xray');
     if (sqft >= 2000) equip.push('panoramic_xray');
@@ -2040,8 +2043,7 @@ function generatePracticeInsurances(problems) {
   return base;
 }
 
-function generateBuiltRooms(sqft) {
-  const ops = Math.max(2, Math.floor(sqft / 500));
+function generateBuiltRooms(sqft, ops) {
   const rooms = [];
   for (let i = 0; i < ops; i++) rooms.push(i < Math.ceil(ops / 2) ? 'premium_ops' : 'basic_ops');
   rooms.push('waiting_area', 'sterilization');
@@ -2062,16 +2064,18 @@ function buildStory(name, problems, patients, reputation) {
   else if (reputation < 3.5) story += 'has been declining without leadership. ';
   else story += 'was well-regarded in the community. ';
   const problemDescs = {
-    low_morale: 'Staff morale is very low — expect attitude problems.',
-    bad_reputation: 'Online reviews are brutal. Rebuilding trust will take time.',
-    equipment_outdated: 'Equipment is ancient — only basic chairs, no imaging.',
-    high_overhead: 'Overhead is bloated. Too much staff and space for the patient count.',
-    dirty_office: 'The office needs a deep clean. Patients have complained.',
-    insurance_mess: 'Loaded with low-paying insurance plans that cannibalize revenue.',
-    staff_drama: 'One key staff member is about to quit and another has very low skills.',
-    debt_heavy: 'The previous owner left unpaid debts you\'ll inherit.',
-    no_marketing: 'Zero marketing in place. Patient count has been dropping.',
-    embezzlement_aftermath: 'Cash went missing under the previous owner. Staff trust is shattered.',
+    low_morale: 'Staff is demoralized and skeptical of new ownership.',
+    bad_reputation: 'Online reviews are brutal — 2-star average. Rebuilding trust will take time and money.',
+    equipment_outdated: 'Equipment is ancient and poorly maintained. Budget for replacements or expect downtime.',
+    high_overhead: 'Way too much space for the operatories — you\'re paying rent on sqft you can\'t use. Overhead is bleeding cash from day one.',
+    dirty_office: 'The office is dingy and dated. Patients notice. A refresh is needed before you can grow.',
+    insurance_mess: 'Loaded with low-paying HMO and discount plans. High volume but terrible per-patient revenue.',
+    staff_drama: 'Staff was loyal to the old doc. One key person is threatening to leave and another is underperforming.',
+    patient_attrition: 'Many patients came for the old doctor personally. Expect significant patient loss during the ownership transition.',
+    no_marketing: 'Zero marketing or recall systems. The patient base has been passively shrinking for years.',
+    no_systems: 'No SOPs, no recall protocols, billing is disorganized. Collections are way below benchmark — money left on the table.',
+    bad_lease: 'Locked into an expensive long-term lease you can\'t renegotiate. Rent is well above market.',
+    embezzlement_aftermath: 'The previous office manager was embezzling. Financial records are unreliable and staff trust is destroyed.',
   };
   problems.forEach(p => { if (problemDescs[p]) story += problemDescs[p] + ' '; });
   return story.trim();
@@ -2092,25 +2096,40 @@ export function generateAcquisitionOptions(difficulty) {
     const price = randInt(scaling.priceRange[0], scaling.priceRange[1]);
     const staffCount = randInt(scaling.staffRange[0], scaling.staffRange[1]);
     const baseRent = Math.round(sqft * randFloat(2.5, 4.0) / 12); // monthly rent
-    const rent = problems.includes('high_overhead') ? Math.round(baseRent * 1.3) : baseRent;
-    const monthlyRevenue = Math.round(patients * scaling.revenuePerPatient / 12);
+    const overheadMult = problems.includes('high_overhead') ? 1.3 : 1.0;
+    const rent = Math.round(baseRent * overheadMult * leaseInflation);
+    const effectivePatients = patients - attritionHit; // actual patients after transition loss
+    const monthlyRevenue = Math.round(effectivePatients * scaling.revenuePerPatient / 12);
+    // No systems: reduce revenue further (poor collections)
+    const collectionLoss = problems.includes('no_systems') ? 0.80 : 1.0; // only collecting 80%
     const cleanliness = problems.includes('dirty_office') ? randInt(15, 30) : randInt(40, 75);
-    const existingDebt = problems.includes('debt_heavy') ? randInt(100000, 200000) : 0;
+    const existingDebt = 0; // asset purchase — buyer doesn't inherit seller's corporate debt
     const embezzlementLoss = problems.includes('embezzlement_aftermath') ? randInt(20000, 50000) : 0;
-    const maxOps = Math.max(2, Math.floor(sqft / 400));
+    // Patient attrition: reduce stated patient count by 25-35% (they'll leave during transition)
+    const attritionHit = problems.includes('patient_attrition') ? Math.round(patients * randFloat(0.25, 0.35)) : 0;
+    // Bad lease: inflate rent
+    const leaseInflation = problems.includes('bad_lease') ? 1.35 : 1.0;
+    // Operatory count: realistic is ~400-500 sqft/op. High overhead = space trap (650+ sqft/op)
+    const sqftPerOp = problems.includes('high_overhead') ? randInt(600, 800) : randInt(380, 520);
+    const actualOps = Math.max(2, Math.floor(sqft / sqftPerOp));
+    const maxOps = Math.max(actualOps, Math.floor(sqft / 400)); // max potential if you optimize
 
     options.push({
       id: `gen_${Date.now()}_${i}`,
       name,
-      story: buildStory(name, problems, patients, reputation),
+      story: buildStory(name, problems, effectivePatients, reputation),
       price,
-      patients,
+      patients: effectivePatients, // post-attrition count (what you're actually getting)
+      statedPatients: patients, // what the seller claimed
+      attritionHit,
       reputation: problems.includes('bad_reputation') ? Math.min(reputation, randFloat(1.5, 2.5)) : reputation,
       sqft,
       rent,
       maxOps,
-      equipment: generatePracticeEquipment(sqft, problems),
-      builtOutRooms: generateBuiltRooms(sqft),
+      actualOps,
+      sqftPerOp,
+      equipment: generatePracticeEquipment(sqft, problems, actualOps),
+      builtOutRooms: generateBuiltRooms(sqft, actualOps),
       staff: generatePracticeStaff(staffCount, problems),
       insurances: generatePracticeInsurances(problems),
       relationships: {
@@ -2118,12 +2137,12 @@ export function generateAcquisitionOptions(difficulty) {
         equipment_tech: randInt(25, 60),
         referring_docs: randInt(20, 55),
         lab: randInt(35, 65),
-        landlord: randInt(40, 70),
+        landlord: problems.includes('bad_lease') ? randInt(20, 35) : randInt(40, 70),
       },
       cleanliness,
       problems,
-      monthlyRevenue,
-      existingDebt,
+      monthlyRevenue: Math.round(monthlyRevenue * collectionLoss),
+      existingDebt: 0,
       embezzlementLoss,
     });
   }
