@@ -22,6 +22,10 @@ import {
   getStaffingRecommendation, FEE_SCHEDULE_EXAMPLES,
   SPECIALIST_ROLES, isProvider,
   setGlobalRng, resetGlobalRng, createDayRng, getGlobalRng,
+  getDailyLeaderboard, getAllTimeLeaderboard,
+  createGroupChallenge, getGroupChallenge, getAllGroupChallenges, getGroupChallengeStats,
+  createTournament, joinTournament, generateBracket, submitTournamentResult, getTournament, getAllTournaments,
+  devSimulateFinishedGame, devCreateGroupWith8Players, devCreateTournamentWith8Players,
 } from './gameData'
 
 // ═══════════════════════════════════════════════════════
@@ -53,73 +57,166 @@ class GameErrorBoundary extends Component {
 // ═══════════════════════════════════════════════════════
 // TITLE SCREEN
 // ═══════════════════════════════════════════════════════
-function TitleScreen({ onStart, onChallenge, onLeaderboard }) {
+function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroupChallenge, onTournament }) {
+  const [lbTab, setLbTab] = useState('alltime'); // 'today' | 'alltime'
+  const [quickCode, setQuickCode] = useState('');
+  const [quickName, setQuickName] = useState('');
+  const [codeError, setCodeError] = useState('');
+  const [copied, setCopied] = useState(null);
+
+  const dailyBoard = getDailyLeaderboard();
+  const allTimeBoard = getAllTimeLeaderboard();
+  const activeBoard = lbTab === 'today' ? dailyBoard : allTimeBoard;
+
+  const handleQuickJoin = () => {
+    const code = quickCode.trim().toUpperCase();
+    if (code.length < 4) { setCodeError('Code must be at least 4 characters'); return; }
+    if (!quickName.trim()) { setCodeError('Enter your name first'); return; }
+    setCodeError('');
+    onQuickJoin({ code, playerName: quickName.trim() });
+  };
+
+  const copyCode = (code) => {
+    navigator.clipboard?.writeText(code).then(() => { setCopied(code); setTimeout(() => setCopied(null), 2000); });
+    setQuickCode(code);
+  };
+
   return (
     <div className="title-screen">
       <div className="title-content">
         <div className="tooth-icon">🦷</div>
         <h1 className="title">DENTAL TYCOON</h1>
         <p className="subtitle">Build Your Practice. Grow Your Empire.</p>
-        <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '30px', maxWidth: '450px', margin: '0 auto 30px', lineHeight: 1.5 }}>
-          Run a dental practice from the ground up. Every season ends with a comprehensive performance review with real practice management insights and tips.
-        </p>
+
+        {/* ═══ PROMINENT LEADERBOARD ═══ */}
+        <div style={{ margin: '20px auto', maxWidth: '520px', background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '14px', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(148,163,184,0.1)' }}>
+            {[{ key: 'today', label: 'Today', count: dailyBoard.length }, { key: 'alltime', label: 'All-Time', count: allTimeBoard.length }].map(tab => (
+              <button key={tab.key} onClick={() => setLbTab(tab.key)} style={{
+                flex: 1, padding: '10px', fontSize: '12px', fontWeight: 700, border: 'none', cursor: 'pointer',
+                background: lbTab === tab.key ? 'rgba(234,179,8,0.15)' : 'transparent',
+                color: lbTab === tab.key ? '#eab308' : '#64748b',
+                borderBottom: lbTab === tab.key ? '2px solid #eab308' : '2px solid transparent',
+              }}>
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </div>
+          {activeBoard.length === 0 ? (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+              {lbTab === 'today' ? 'No scores today yet — be the first!' : 'No scores yet — play a game to claim #1!'}
+            </div>
+          ) : (
+            <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
+              {activeBoard.map((entry, i) => (
+                <div key={entry.id || i} style={{
+                  display: 'grid', gridTemplateColumns: '28px 1fr 60px 40px 80px 65px', alignItems: 'center',
+                  padding: '8px 12px', gap: '6px', fontSize: '12px',
+                  borderBottom: '1px solid rgba(148,163,184,0.06)',
+                  background: i === 0 ? 'rgba(234,179,8,0.06)' : 'transparent',
+                }}>
+                  <span style={{ fontWeight: 'bold', color: i === 0 ? '#eab308' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#64748b', textAlign: 'center' }}>
+                    {i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+                  </span>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {entry.playerName || 'Anonymous'}
+                    {entry.isTournamentChampion && <span style={{ marginLeft: '4px', fontSize: '10px' }}>🏆</span>}
+                  </span>
+                  <span style={{ color: '#22c55e', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'right' }}>{entry.overallScore || 0}</span>
+                  <span style={{ color: '#64748b', textAlign: 'center', fontSize: '11px' }}>{entry.overallGrade || '?'}</span>
+                  <span style={{ color: '#475569', fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.difficulty || 'Standard'}</span>
+                  {entry.challengeCode ? (
+                    <button onClick={() => copyCode(entry.challengeCode)} style={{
+                      fontSize: '10px', fontFamily: 'monospace', color: copied === entry.challengeCode ? '#22c55e' : '#eab308',
+                      background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.2)',
+                      borderRadius: '4px', padding: '2px 6px', cursor: 'pointer',
+                    }}>
+                      {copied === entry.challengeCode ? 'Copied!' : entry.challengeCode}
+                    </button>
+                  ) : <span style={{ fontSize: '10px', color: '#334155' }}>—</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ═══ CHALLENGE CODE INPUT ═══ */}
+        <div style={{ margin: '16px auto', maxWidth: '520px', display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+          <input value={quickName} onChange={e => setQuickName(e.target.value)} placeholder="Your Name"
+            style={{ flex: '0 0 120px', padding: '10px 12px', fontSize: '13px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', outline: 'none' }} />
+          <input value={quickCode} onChange={e => { setQuickCode(e.target.value.toUpperCase()); setCodeError(''); }} placeholder="Challenge Code"
+            style={{ flex: 1, padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', letterSpacing: '2px', borderRadius: '10px', border: '1px solid rgba(234,179,8,0.3)', background: 'rgba(15,23,42,0.8)', color: '#eab308', outline: 'none', textAlign: 'center', textTransform: 'uppercase' }}
+            maxLength={8} onKeyDown={e => e.key === 'Enter' && handleQuickJoin()} />
+          <button onClick={handleQuickJoin} style={{
+            flex: '0 0 auto', padding: '10px 16px', fontSize: '13px', fontWeight: 700, borderRadius: '10px',
+            background: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.4)', color: '#eab308', cursor: 'pointer',
+          }}>
+            Accept Challenge
+          </button>
+        </div>
+        {codeError && <div style={{ textAlign: 'center', fontSize: '12px', color: '#ef4444', marginTop: '-8px', marginBottom: '8px' }}>{codeError}</div>}
+
+        {/* ═══ PLAY BUTTONS ═══ */}
         <div className="start-options">
           <button className="start-btn" onClick={() => onStart('scratch')}>
             <span className="btn-icon">🏗️</span>
             <div>
               <div className="btn-title">Start from Scratch</div>
-              <div className="btn-desc">Empty office. Build your dream practice from nothing.</div>
+              <div className="btn-desc">Build your dream practice from nothing.</div>
             </div>
           </button>
           <button className="start-btn" onClick={() => onStart('acquire')} style={{ borderColor: '#a78bfa' }}>
             <span className="btn-icon">🏢</span>
             <div>
               <div className="btn-title">Acquire a Practice</div>
-              <div className="btn-desc">Buy an existing practice. Inherit staff, patients, and problems.</div>
+              <div className="btn-desc">Buy an existing practice with staff, patients, and problems.</div>
             </div>
-          </button>
-
-          {/* Challenge Mode — prominently featured */}
-          <button className="start-btn" onClick={() => onChallenge()} style={{ borderColor: '#eab308', background: 'rgba(234,179,8,0.08)', position: 'relative' }}>
-            <span className="btn-icon">🏆</span>
-            <div>
-              <div className="btn-title" style={{ color: '#eab308' }}>Challenge a Friend</div>
-              <div className="btn-desc">Play the SAME season as a friend — same events, same market, different decisions. Compare scores and see who runs the better practice!</div>
-            </div>
-            <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#eab308', color: '#0a1628', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>COMPETE</span>
-          </button>
-
-          {/* Leaderboard — with inline top score preview */}
-          <button className="start-btn" onClick={() => onLeaderboard()} style={{ borderColor: '#a78bfa', background: 'rgba(167,139,250,0.08)', position: 'relative' }}>
-            <span className="btn-icon">📊</span>
-            <div>
-              <div className="btn-title" style={{ color: '#a78bfa' }}>Leaderboard</div>
-              <div className="btn-desc">
-                {(() => {
-                  const board = getLeaderboard();
-                  if (board.length === 0) return 'No scores yet — be the first to claim #1!';
-                  return `Top score: ${board[0].overallScore}/1000 (${board[0].overallGrade}) · ${board.length} game${board.length !== 1 ? 's' : ''} played`;
-                })()}
-              </div>
-            </div>
-            <span style={{ position: 'absolute', top: '-8px', right: '-8px', background: '#a78bfa', color: '#0a1628', fontSize: '10px', fontWeight: 'bold', padding: '2px 8px', borderRadius: '10px' }}>
-              {getLeaderboard().length || 0}
-            </span>
           </button>
         </div>
 
-        {/* Season feedback promo */}
-        <div style={{ marginTop: '24px', padding: '12px 16px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px', maxWidth: '450px', margin: '24px auto 0' }}>
-          <div style={{ fontSize: '13px', color: '#60a5fa', fontWeight: 'bold', marginBottom: '4px' }}>📊 Every Season = A Learning Experience</div>
-          <div style={{ fontSize: '12px', color: '#94a3b8', lineHeight: 1.5 }}>
-            Complete a season and receive detailed feedback on your management decisions — overhead control, staffing, insurance strategy, patient growth, and real-world dental practice tips you can actually use.
+        {/* ═══ COMPETITIVE MODES ═══ */}
+        <div style={{ margin: '16px auto', maxWidth: '520px' }}>
+          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '8px' }}>Competitive Modes</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+            <button onClick={() => onChallenge()} style={{ padding: '12px 8px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏆</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#eab308' }}>1v1 Challenge</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Same season, head-to-head</div>
+            </button>
+            <button onClick={() => onGroupChallenge()} style={{ padding: '12px 8px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>👥</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#60a5fa' }}>Group Challenge</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>5-50 players compete</div>
+            </button>
+            <button onClick={() => onTournament()} style={{ padding: '12px 8px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏅</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444' }}>Tournament</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Bracket elimination</div>
+            </button>
+          </div>
+        </div>
+
+        {/* ═══ DEV SHORTCUTS ═══ */}
+        <div style={{ margin: '16px auto', maxWidth: '520px', padding: '10px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px' }}>
+          <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold', textAlign: 'center', marginBottom: '6px' }}>DEV TESTING</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+            {[
+              { label: 'Sim Score', fn: () => { devSimulateFinishedGame(); window.location.reload(); } },
+              { label: 'Fake Group (8)', fn: () => { devCreateGroupWith8Players('TESTGP'); window.location.reload(); } },
+              { label: 'Fake Tourney (8)', fn: () => { devCreateTournamentWith8Players('TESTTM'); window.location.reload(); } },
+              { label: 'Clear Storage', fn: () => { localStorage.clear(); window.location.reload(); } },
+            ].map(btn => (
+              <button key={btn.label} onClick={btn.fn} style={{
+                fontSize: '10px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444',
+              }}>{btn.label}</button>
+            ))}
           </div>
         </div>
 
         {/* Feedback link */}
-        <div style={{ marginTop: '16px', textAlign: 'center' }}>
-          <a href="mailto:feedback@dentaltycoon.com?subject=Dental%20Tycoon%20Feedback&body=Hey%20-%20I%20have%20some%20feedback%20on%20Dental%20Tycoon%3A%0A%0A"
-            style={{ fontSize: '12px', color: '#64748b', textDecoration: 'none', borderBottom: '1px solid rgba(100,116,139,0.3)', paddingBottom: '1px' }}>
+        <div style={{ marginTop: '12px', textAlign: 'center' }}>
+          <a href="mailto:feedback@dentaltycoon.com?subject=Dental%20Tycoon%20Feedback" style={{ fontSize: '12px', color: '#64748b', textDecoration: 'none', borderBottom: '1px solid rgba(100,116,139,0.3)', paddingBottom: '1px' }}>
             Have feedback? Drop us a note
           </a>
         </div>
@@ -788,6 +885,524 @@ function OpposingForcesTips({ show }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// GROUP CHALLENGE SETUP SCREEN
+// ═══════════════════════════════════════════════════════
+function GroupChallengeSetupScreen({ onStartChallenge, onViewResults, onBack }) {
+  const [mode, setMode] = useState(null); // 'create' | 'join' | 'results'
+  const [groupName, setGroupName] = useState('');
+  const [playerName, setPlayerName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [viewCode, setViewCode] = useState('');
+  const [playerCap, setPlayerCap] = useState('');
+  const [selectedDifficulty, setSelectedDifficulty] = useState(DIFFICULTY_MODES.find(d => d.id === 'intermediate') || DIFFICULTY_MODES[1]);
+  const [error, setError] = useState('');
+  const [createdCode, setCreatedCode] = useState(null);
+  const allGroups = getAllGroupChallenges();
+  const myGroupCodes = Object.keys(allGroups);
+
+  const handleCreate = () => {
+    if (!playerName.trim()) { setError('Enter your name'); return; }
+    const code = generateChallengeCode();
+    createGroupChallenge({ name: groupName.trim() || `${playerName.trim()}'s Challenge`, code, creatorName: playerName.trim(), playerCap: playerCap ? parseInt(playerCap) : null, difficulty: selectedDifficulty });
+    setCreatedCode(code);
+  };
+
+  const handleJoin = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 4) { setError('Code must be at least 4 characters'); return; }
+    if (!playerName.trim()) { setError('Enter your name'); return; }
+    onStartChallenge({ code, playerName: playerName.trim(), difficulty: selectedDifficulty });
+  };
+
+  const handleStartPlaying = () => {
+    onStartChallenge({ code: createdCode, playerName: playerName.trim(), difficulty: selectedDifficulty });
+  };
+
+  if (createdCode) {
+    return (
+      <div className="acquire-screen">
+        <h2 className="acquire-title">Group Challenge Created!</h2>
+        <div style={{ textAlign: 'center', margin: '20px auto', maxWidth: '400px' }}>
+          <div style={{ fontSize: '48px', fontFamily: 'monospace', fontWeight: 'bold', color: '#eab308', letterSpacing: '8px', marginBottom: '12px' }}>{createdCode}</div>
+          <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px' }}>Share this code with your group. Everyone plays the same scenario.</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+            <button onClick={() => { navigator.clipboard?.writeText(`Think you can run a practice better than me? Join my Dental Tycoon challenge! Code: ${createdCode} — play at dentaltycoon.com`); }} style={{ padding: '10px 20px', background: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.4)', borderRadius: '8px', color: '#eab308', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>
+              Copy Invite Message
+            </button>
+          </div>
+          <button onClick={handleStartPlaying} style={{ padding: '14px 32px', background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', width: '100%', marginBottom: '8px' }}>
+            Start Playing
+          </button>
+          <button onClick={() => onViewResults(createdCode)} style={{ padding: '10px 20px', background: 'transparent', border: '1px solid rgba(148,163,184,0.3)', borderRadius: '8px', color: '#94a3b8', fontSize: '12px', cursor: 'pointer' }}>
+            View Results Later
+          </button>
+        </div>
+        <button className="back-btn" onClick={onBack}>Back to Home</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="acquire-screen">
+      <h2 className="acquire-title">Group Challenge</h2>
+      <p className="acquire-sub" style={{ fontSize: '14px' }}>Think you run a better practice than your classmates? Prove it. Same patients, same events, same market. Only one comes out on top.</p>
+
+      {!mode && (
+        <div className="practice-list" style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div className="practice-card" onClick={() => setMode('create')} style={{ cursor: 'pointer' }}>
+            <h3 className="practice-name">🏟️ Create Group Challenge</h3>
+            <p className="practice-desc">Set up a challenge and invite your crew. You play first, then share the code.</p>
+          </div>
+          <div className="practice-card" onClick={() => setMode('join')} style={{ cursor: 'pointer' }}>
+            <h3 className="practice-name">🎟️ Join Group Challenge</h3>
+            <p className="practice-desc">Got a code? Jump in and compete against the group.</p>
+          </div>
+          <div className="practice-card" onClick={() => setMode('results')} style={{ cursor: 'pointer' }}>
+            <h3 className="practice-name">📊 View Group Results</h3>
+            <p className="practice-desc">Check standings and see how everyone performed.</p>
+          </div>
+          {myGroupCodes.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Your Groups</div>
+              {myGroupCodes.slice(0, 5).map(code => {
+                const g = allGroups[code];
+                const results = getChallengeResults(code);
+                return (
+                  <div key={code} onClick={() => onViewResults(code)} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', marginBottom: '4px', cursor: 'pointer', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: '#e2e8f0' }}>{g.name || code}</span>
+                    <span style={{ fontSize: '11px', color: '#eab308', fontFamily: 'monospace' }}>{code} · {results.length} players</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'create' && (
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Your Name</label>
+            <input value={playerName} onChange={e => { setPlayerName(e.target.value); setError(''); }} placeholder="DrMolar" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Group Name (optional)</label>
+            <input value={groupName} onChange={e => setGroupName(e.target.value)} placeholder="DDS Class of 2026" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Player Cap (optional)</label>
+            <input value={playerCap} onChange={e => setPlayerCap(e.target.value.replace(/\D/g, ''))} placeholder="e.g., 10" type="number" min="2" max="50" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Difficulty</label>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {DIFFICULTY_MODES.filter(d => d.startModes?.includes('scratch')).map(d => (
+                <button key={d.id} onClick={() => setSelectedDifficulty(d)} style={{ padding: '6px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: selectedDifficulty.id === d.id ? `2px solid ${d.id === 'hell' ? '#ef4444' : d.id === 'expert' ? '#ef4444' : d.id === 'intermediate' ? '#eab308' : '#22c55e'}` : '1px solid rgba(148,163,184,0.2)', background: selectedDifficulty.id === d.id ? 'rgba(234,179,8,0.15)' : 'transparent', color: '#e2e8f0' }}>
+                  {d.icon} {d.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          {error && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{error}</div>}
+          <button onClick={handleCreate} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            Create Challenge
+          </button>
+        </div>
+      )}
+
+      {mode === 'join' && (
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Your Name</label>
+            <input value={playerName} onChange={e => { setPlayerName(e.target.value); setError(''); }} placeholder="ToothFairy" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Challenge Code</label>
+            <input value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); setError(''); }} placeholder="ABC123" maxLength={8} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(234,179,8,0.3)', background: 'rgba(15,23,42,0.8)', color: '#eab308', fontSize: '20px', fontFamily: 'monospace', letterSpacing: '4px', textAlign: 'center', textTransform: 'uppercase', boxSizing: 'border-box' }} />
+          </div>
+          {error && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{error}</div>}
+          <button onClick={handleJoin} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #eab308, #ca8a04)', border: 'none', borderRadius: '10px', color: '#0a1628', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            Join Challenge
+          </button>
+        </div>
+      )}
+
+      {mode === 'results' && (
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Challenge Code</label>
+            <input value={viewCode} onChange={e => setViewCode(e.target.value.toUpperCase())} placeholder="ABC123" maxLength={8} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#eab308', fontSize: '20px', fontFamily: 'monospace', letterSpacing: '4px', textAlign: 'center', textTransform: 'uppercase', boxSizing: 'border-box' }} />
+          </div>
+          <button onClick={() => { if (viewCode.length >= 4) onViewResults(viewCode); }} style={{ width: '100%', padding: '14px', background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.4)', borderRadius: '10px', color: '#60a5fa', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            View Results
+          </button>
+        </div>
+      )}
+
+      <button className="back-btn" onClick={mode ? () => setMode(null) : onBack}>{mode ? 'Back' : 'Home'}</button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// GROUP CHALLENGE RESULTS SCREEN
+// ═══════════════════════════════════════════════════════
+function GroupChallengeResultsScreen({ code, onBack, onPlayAgain }) {
+  const results = getChallengeResults(code || '').sort((a, b) => (b.overallScore || 0) - (a.overallScore || 0));
+  const group = getGroupChallenge(code || '');
+  const stats = getGroupChallengeStats(code || '');
+  const [expandedPlayer, setExpandedPlayer] = useState(null);
+
+  if (!code || results.length === 0) {
+    return (
+      <div className="acquire-screen">
+        <h2 className="acquire-title">No Results Yet</h2>
+        <p className="acquire-sub">No one has played this challenge yet. Share the code and start competing!</p>
+        <div style={{ textAlign: 'center', fontSize: '32px', fontFamily: 'monospace', color: '#eab308', letterSpacing: '6px', margin: '20px' }}>{code || '???'}</div>
+        <button className="back-btn" onClick={onBack}>Back</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="acquire-screen" style={{ maxWidth: '600px', margin: '0 auto' }}>
+      <h2 className="acquire-title">{group?.name || 'Group Challenge'} Results</h2>
+      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+        <span style={{ fontFamily: 'monospace', color: '#eab308', fontSize: '18px', letterSpacing: '4px' }}>{code}</span>
+        <span style={{ color: '#64748b', fontSize: '12px', marginLeft: '8px' }}>{results.length} player{results.length !== 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Stats Banner */}
+      {stats && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px', marginBottom: '16px' }}>
+          {[
+            { label: 'Avg Score', value: stats.avgScore, color: '#60a5fa' },
+            { label: 'High', value: stats.highScore, color: '#22c55e' },
+            { label: 'Low', value: stats.lowScore, color: '#ef4444' },
+            { label: 'Bankrupt', value: stats.bankruptCount, color: '#eab308' },
+          ].map(s => (
+            <div key={s.label} style={{ padding: '8px', background: 'rgba(30,41,59,0.5)', borderRadius: '8px', textAlign: 'center' }}>
+              <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase' }}>{s.label}</div>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: s.color, fontFamily: 'Fredoka One' }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Rankings */}
+      <div style={{ marginBottom: '16px' }}>
+        {results.map((r, i) => (
+          <div key={i}>
+            <div onClick={() => setExpandedPlayer(expandedPlayer === i ? null : i)} style={{
+              display: 'grid', gridTemplateColumns: '36px 1fr 60px 40px 50px', alignItems: 'center',
+              padding: '10px 12px', gap: '8px', cursor: 'pointer',
+              background: i === 0 ? 'rgba(234,179,8,0.08)' : expandedPlayer === i ? 'rgba(59,130,246,0.06)' : 'transparent',
+              borderBottom: '1px solid rgba(148,163,184,0.06)', borderRadius: expandedPlayer === i ? '8px 8px 0 0' : '0',
+            }}>
+              <span style={{ fontWeight: 'bold', fontSize: '14px', textAlign: 'center', color: i === 0 ? '#eab308' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#64748b' }}>
+                {i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
+              </span>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#e2e8f0' }}>{r.playerName || 'Anonymous'}</div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>{r.outcome || 'Completed'} · {r.staffCount || '?'} staff</div>
+              </div>
+              <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#22c55e', fontFamily: 'monospace', textAlign: 'right' }}>{r.overallScore || 0}</span>
+              <span style={{ fontSize: '12px', color: '#64748b', textAlign: 'center' }}>{r.overallGrade || '?'}</span>
+              <span style={{ fontSize: '11px', color: r.finalCash >= 0 ? '#22c55e' : '#ef4444', textAlign: 'right' }}>${((r.finalCash || 0) / 1000).toFixed(0)}K</span>
+            </div>
+            {expandedPlayer === i && (
+              <div style={{ padding: '12px', background: 'rgba(30,41,59,0.3)', borderRadius: '0 0 8px 8px', marginBottom: '4px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '10px' }}>
+                  {[
+                    { label: 'Cash', value: `$${(r.finalCash || 0).toLocaleString()}`, color: r.finalCash >= 0 ? '#22c55e' : '#ef4444' },
+                    { label: 'Patients', value: r.finalPatients || 0, color: '#60a5fa' },
+                    { label: 'Reputation', value: `${(r.finalReputation || 0).toFixed(1)} ⭐`, color: '#eab308' },
+                    { label: 'Overhead', value: `${Math.round(r.overheadRatio || 0)}%`, color: (r.overheadRatio || 100) < 65 ? '#22c55e' : '#ef4444' },
+                    { label: 'Profit Margin', value: `${Math.round(r.profitMargin || 0)}%`, color: (r.profitMargin || 0) >= 0 ? '#22c55e' : '#ef4444' },
+                    { label: 'Mo. Revenue', value: `$${Math.round((r.monthlyRevenue || 0) / 1000)}K`, color: '#22c55e' },
+                  ].map(s => (
+                    <div key={s.label} style={{ textAlign: 'center' }}>
+                      <div style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase' }}>{s.label}</div>
+                      <div style={{ fontSize: '13px', fontWeight: 'bold', color: s.color }}>{s.value}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Share */}
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '16px' }}>
+        <button onClick={() => { const txt = `I placed #${results.findIndex(r => r.playerName === results[0]?.playerName) + 1} out of ${results.length} on Dental Tycoon! Code: ${code} — play at dentaltycoon.com`; navigator.clipboard?.writeText(txt); }} style={{ padding: '10px 20px', background: 'rgba(234,179,8,0.15)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '8px', color: '#eab308', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
+          Share Results
+        </button>
+        <button onClick={() => { const newCode = generateChallengeCode(); createGroupChallenge({ name: (group?.name || 'Rematch') + ' (Rematch)', code: newCode, creatorName: 'Player', difficulty: DIFFICULTY_MODES.find(d => d.id === (group?.difficultyId || 'intermediate')) || DIFFICULTY_MODES[1] }); onPlayAgain({ code: newCode, playerName: 'Player', difficulty: DIFFICULTY_MODES.find(d => d.id === (group?.difficultyId || 'intermediate')) || DIFFICULTY_MODES[1] }); }} style={{ padding: '10px 20px', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', color: '#60a5fa', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
+          Challenge Again (New Code)
+        </button>
+      </div>
+
+      <button className="back-btn" onClick={onBack}>Back to Home</button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// TOURNAMENT SETUP SCREEN
+// ═══════════════════════════════════════════════════════
+function TournamentSetupScreen({ onViewBracket, onBack }) {
+  const [mode, setMode] = useState(null); // 'create' | 'join' | 'view'
+  const [tournamentName, setTournamentName] = useState('');
+  const [hostName, setHostName] = useState('');
+  const [joinCode, setJoinCode] = useState('');
+  const [joinName, setJoinName] = useState('');
+  const [viewCode, setViewCode] = useState('');
+  const [maxPlayers, setMaxPlayers] = useState('8');
+  const [error, setError] = useState('');
+  const [createdCode, setCreatedCode] = useState(null);
+  const allTournaments = getAllTournaments();
+  const tournamentCodes = Object.keys(allTournaments);
+
+  const handleCreate = () => {
+    if (!hostName.trim()) { setError('Enter your name'); return; }
+    const code = generateChallengeCode();
+    createTournament({ name: tournamentName.trim() || `${hostName.trim()}'s Tournament`, hostName: hostName.trim(), code, maxPlayers: parseInt(maxPlayers) || 8 });
+    setCreatedCode(code);
+  };
+
+  const handleJoin = () => {
+    const code = joinCode.trim().toUpperCase();
+    if (code.length < 4) { setError('Code too short'); return; }
+    if (!joinName.trim()) { setError('Enter your name'); return; }
+    const t = joinTournament(code, joinName.trim());
+    if (!t) { setError('Tournament not found or already started'); return; }
+    onViewBracket(code);
+  };
+
+  if (createdCode) {
+    const t = getTournament(createdCode);
+    return (
+      <div className="acquire-screen">
+        <h2 className="acquire-title">Tournament Created!</h2>
+        <div style={{ textAlign: 'center', margin: '20px auto', maxWidth: '400px' }}>
+          <div style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '8px' }}>{t?.name}</div>
+          <div style={{ fontSize: '48px', fontFamily: 'monospace', fontWeight: 'bold', color: '#ef4444', letterSpacing: '8px', marginBottom: '12px' }}>{createdCode}</div>
+          <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '4px' }}>Share this code with players. Max {t?.maxPlayers || 8} players.</p>
+          <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '16px' }}>{t?.players?.length || 1} player(s) joined</p>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
+            <button onClick={() => navigator.clipboard?.writeText(`Join my Dental Tycoon tournament! Code: ${createdCode} — play at dentaltycoon.com`)} style={{ padding: '10px 20px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
+              Copy Invite
+            </button>
+          </div>
+          <button onClick={() => onViewBracket(createdCode)} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            View Bracket / Start
+          </button>
+        </div>
+        <button className="back-btn" onClick={onBack}>Back</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="acquire-screen">
+      <h2 className="acquire-title">Bracket Tournament</h2>
+      <p className="acquire-sub" style={{ fontSize: '14px' }}>Single elimination. No second chances. Create a bracket, invite your rivals, only one survives.</p>
+
+      {!mode && (
+        <div className="practice-list" style={{ maxWidth: '500px', margin: '0 auto' }}>
+          <div className="practice-card" onClick={() => setMode('create')} style={{ cursor: 'pointer' }}>
+            <h3 className="practice-name">🏟️ Create Tournament</h3>
+            <p className="practice-desc">Host a bracket tournament. Invite 4-32 players.</p>
+          </div>
+          <div className="practice-card" onClick={() => setMode('join')} style={{ cursor: 'pointer' }}>
+            <h3 className="practice-name">🎟️ Join Tournament</h3>
+            <p className="practice-desc">Enter a tournament code to join the lobby.</p>
+          </div>
+          <div className="practice-card" onClick={() => setMode('view')} style={{ cursor: 'pointer' }}>
+            <h3 className="practice-name">📊 View Bracket</h3>
+            <p className="practice-desc">Check bracket status and results.</p>
+          </div>
+          {tournamentCodes.length > 0 && (
+            <div style={{ marginTop: '16px' }}>
+              <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Your Tournaments</div>
+              {tournamentCodes.slice(0, 5).map(code => {
+                const t = allTournaments[code];
+                return (
+                  <div key={code} onClick={() => onViewBracket(code)} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', marginBottom: '4px', cursor: 'pointer', alignItems: 'center' }}>
+                    <span style={{ fontSize: '12px', color: '#e2e8f0' }}>{t.name}</span>
+                    <span style={{ fontSize: '11px', color: '#ef4444', fontFamily: 'monospace' }}>{code} · {t.status} · {t.players?.length || 0}p</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'create' && (
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Your Name</label>
+            <input value={hostName} onChange={e => { setHostName(e.target.value); setError(''); }} placeholder="DrMolar" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Tournament Name</label>
+            <input value={tournamentName} onChange={e => setTournamentName(e.target.value)} placeholder="DDS Class of 2026 Showdown" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Max Players</label>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {['4', '8', '16', '32'].map(n => (
+                <button key={n} onClick={() => setMaxPlayers(n)} style={{ flex: 1, padding: '8px', borderRadius: '8px', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', border: maxPlayers === n ? '2px solid #ef4444' : '1px solid rgba(148,163,184,0.2)', background: maxPlayers === n ? 'rgba(239,68,68,0.15)' : 'transparent', color: maxPlayers === n ? '#ef4444' : '#94a3b8' }}>{n}</button>
+              ))}
+            </div>
+          </div>
+          {error && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{error}</div>}
+          <button onClick={handleCreate} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            Create Tournament
+          </button>
+        </div>
+      )}
+
+      {mode === 'join' && (
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '12px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Your Name</label>
+            <input value={joinName} onChange={e => { setJoinName(e.target.value); setError(''); }} placeholder="ToothFairy" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', fontSize: '14px', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ fontSize: '11px', color: '#64748b', display: 'block', marginBottom: '4px' }}>Tournament Code</label>
+            <input value={joinCode} onChange={e => { setJoinCode(e.target.value.toUpperCase()); setError(''); }} placeholder="ABC123" maxLength={8} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.3)', background: 'rgba(15,23,42,0.8)', color: '#ef4444', fontSize: '20px', fontFamily: 'monospace', letterSpacing: '4px', textAlign: 'center', textTransform: 'uppercase', boxSizing: 'border-box' }} />
+          </div>
+          {error && <div style={{ color: '#ef4444', fontSize: '12px', marginBottom: '8px' }}>{error}</div>}
+          <button onClick={handleJoin} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            Join Tournament
+          </button>
+        </div>
+      )}
+
+      {mode === 'view' && (
+        <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <div style={{ marginBottom: '16px' }}>
+            <input value={viewCode} onChange={e => setViewCode(e.target.value.toUpperCase())} placeholder="Tournament Code" maxLength={8} style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#ef4444', fontSize: '20px', fontFamily: 'monospace', letterSpacing: '4px', textAlign: 'center', textTransform: 'uppercase', boxSizing: 'border-box' }} />
+          </div>
+          <button onClick={() => { if (viewCode.length >= 4) onViewBracket(viewCode); }} style={{ width: '100%', padding: '14px', background: 'rgba(239,68,68,0.2)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: '10px', color: '#ef4444', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+            View Bracket
+          </button>
+        </div>
+      )}
+
+      <button className="back-btn" onClick={mode ? () => setMode(null) : onBack}>{mode ? 'Back' : 'Home'}</button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// TOURNAMENT BRACKET SCREEN
+// ═══════════════════════════════════════════════════════
+function TournamentBracketScreen({ code, playerName, onPlayMatch, onBack }) {
+  const [tournament, setTournament] = useState(() => getTournament(code));
+  const refreshTournament = () => setTournament(getTournament(code));
+
+  if (!tournament) {
+    return (
+      <div className="acquire-screen">
+        <h2 className="acquire-title">Tournament Not Found</h2>
+        <p className="acquire-sub">No tournament found with code: {code}</p>
+        <button className="back-btn" onClick={onBack}>Back</button>
+      </div>
+    );
+  }
+
+  // Lobby state
+  if (tournament.status === 'lobby') {
+    return (
+      <div className="acquire-screen" style={{ maxWidth: '500px', margin: '0 auto' }}>
+        <h2 className="acquire-title">{tournament.name}</h2>
+        <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+          <div style={{ fontSize: '32px', fontFamily: 'monospace', fontWeight: 'bold', color: '#ef4444', letterSpacing: '6px' }}>{code}</div>
+          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>Waiting for players... ({tournament.players.length}/{tournament.maxPlayers})</div>
+        </div>
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Players ({tournament.players.length})</div>
+          {tournament.players.map((p, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: 'rgba(30,41,59,0.4)', borderRadius: '8px', marginBottom: '4px' }}>
+              <span style={{ color: '#eab308' }}>{i === 0 ? '👑' : '🦷'}</span>
+              <span style={{ color: '#e2e8f0', fontSize: '13px' }}>{p.name}</span>
+              {i === 0 && <span style={{ fontSize: '10px', color: '#64748b', marginLeft: 'auto' }}>Host</span>}
+            </div>
+          ))}
+        </div>
+        {tournament.players.length >= 2 && (
+          <button onClick={() => { generateBracket(code); refreshTournament(); }} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer', marginBottom: '8px' }}>
+            Start Tournament ({tournament.players.length} players)
+          </button>
+        )}
+        <button onClick={refreshTournament} style={{ width: '100%', padding: '10px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', color: '#60a5fa', fontSize: '12px', cursor: 'pointer' }}>
+          Refresh Player List
+        </button>
+        <button className="back-btn" onClick={onBack}>Back</button>
+      </div>
+    );
+  }
+
+  // Active/Complete bracket view
+  const roundLabels = ['Round 1', 'Quarters', 'Semis', 'Final', 'Champion'];
+
+  return (
+    <div className="acquire-screen" style={{ maxWidth: '100%', overflow: 'auto' }}>
+      <h2 className="acquire-title" style={{ fontSize: '18px' }}>{tournament.name}</h2>
+      {tournament.champion && (
+        <div style={{ textAlign: 'center', marginBottom: '16px', padding: '12px', background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '10px' }}>
+          <div style={{ fontSize: '28px' }}>👑</div>
+          <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#eab308', fontFamily: 'Fredoka One' }}>CHAMPION: {tournament.champion}</div>
+        </div>
+      )}
+
+      {/* Bracket visualization */}
+      <div style={{ display: 'flex', gap: '4px', overflowX: 'auto', padding: '8px 0', minHeight: '300px', alignItems: 'center' }}>
+        {tournament.rounds.map((round, ri) => (
+          <div key={ri} style={{ flex: '0 0 auto', minWidth: '140px', display: 'flex', flexDirection: 'column', gap: `${Math.pow(2, ri) * 8}px`, justifyContent: 'center' }}>
+            <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', textAlign: 'center', marginBottom: '4px' }}>
+              {roundLabels[ri] || `R${ri + 1}`}
+            </div>
+            {round.matchups.map((m, mi) => (
+              <div key={mi} style={{
+                background: m.winner ? 'rgba(30,41,59,0.6)' : 'rgba(30,41,59,0.3)',
+                border: `1px solid ${m.winner ? 'rgba(34,197,94,0.3)' : 'rgba(148,163,184,0.15)'}`,
+                borderRadius: '8px', padding: '6px 8px', fontSize: '11px',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: m.winner === m.player1?.name ? '#22c55e' : m.winner && m.winner !== m.player1?.name ? '#ef4444' : '#e2e8f0', fontWeight: m.winner === m.player1?.name ? 'bold' : 'normal' }}>
+                  <span>{m.player1?.name || 'TBD'}{m.player1?.isBye ? ' (BYE)' : ''}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{m.result1?.overallScore || ''}</span>
+                </div>
+                <div style={{ height: '1px', background: 'rgba(148,163,184,0.1)' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0', color: m.winner === m.player2?.name ? '#22c55e' : m.winner && m.winner !== m.player2?.name ? '#ef4444' : '#e2e8f0', fontWeight: m.winner === m.player2?.name ? 'bold' : 'normal' }}>
+                  <span>{m.player2?.name || 'TBD'}{m.player2?.isBye ? ' (BYE)' : ''}</span>
+                  <span style={{ fontFamily: 'monospace' }}>{m.result2?.overallScore || ''}</span>
+                </div>
+                {m.winner && <div style={{ fontSize: '9px', color: '#22c55e', textAlign: 'center', marginTop: '2px' }}>Winner: {m.winner}</div>}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '16px', flexWrap: 'wrap' }}>
+        <button onClick={refreshTournament} style={{ padding: '10px 20px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', color: '#60a5fa', fontSize: '12px', cursor: 'pointer' }}>
+          Refresh
+        </button>
+        <button onClick={() => navigator.clipboard?.writeText(tournament.champion ? `${tournament.champion} won the "${tournament.name}" tournament on Dental Tycoon! Code: ${code}` : `Tournament "${tournament.name}" in progress! Code: ${code} — join at dentaltycoon.com`)} style={{ padding: '10px 20px', background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '8px', color: '#eab308', fontSize: '12px', cursor: 'pointer' }}>
+          Share
+        </button>
+      </div>
+      <button className="back-btn" onClick={onBack}>Back to Home</button>
     </div>
   );
 }
@@ -5592,8 +6207,17 @@ export default function App() {
     setScreen('difficulty');
   };
 
-  const handleChallenge = () => {
-    setScreen('challengeSetup');
+  const handleChallenge = () => { setScreen('challengeSetup'); };
+  const handleGroupChallenge = () => { setScreen('groupChallengeSetup'); };
+  const handleTournament = () => { setScreen('tournamentSetup'); };
+  const [groupChallengeData, setGroupChallengeData] = useState(null);
+  const [tournamentData, setTournamentData] = useState(null);
+
+  const handleQuickJoin = ({ code, playerName }) => {
+    setChallengeData({ code, playerName });
+    setDifficulty(DIFFICULTY_MODES.find(d => d.id === 'intermediate') || DIFFICULTY_MODES[1]);
+    setStartMode('scratch');
+    setScreen('spaceSelection');
   };
 
   const handleStartChallenge = ({ code, playerName, difficulty: diff }) => {
@@ -5648,7 +6272,7 @@ export default function App() {
   };
 
   // ── SCREEN RENDERING ROUTER ──
-  if (screen === 'title') return <TitleScreen onStart={handleStart} onChallenge={handleChallenge} onLeaderboard={() => setScreen('leaderboard')} />;
+  if (screen === 'title') return <TitleScreen onStart={handleStart} onChallenge={handleChallenge} onLeaderboard={() => setScreen('leaderboard')} onQuickJoin={handleQuickJoin} onGroupChallenge={handleGroupChallenge} onTournament={handleTournament} />;
   if (screen === 'leaderboard') return <LeaderboardScreen onBack={() => setScreen('title')} />;
   if (screen === 'challengeSetup') return <ChallengeSetupScreen onStartChallenge={handleStartChallenge} onJoinChallenge={handleJoinChallenge} onBack={() => setScreen('title')} />;
   if (screen === 'challengeCompare') return <ChallengeCompareScreen challengeCode={challengeData?.code} myResult={challengeResult} onBack={() => { setChallengeData(null); setChallengeResult(null); setScreen('title'); }} />;
@@ -5658,6 +6282,10 @@ export default function App() {
   if (screen === 'setup') return <SetupPhaseScreen buildoutData={buildoutData} difficulty={difficulty} onComplete={handleSetupComplete} onBack={() => setScreen('buildout')} />;
   if (screen === 'acquire') return <AcquireScreen difficulty={difficulty} onSelect={handleAcquirePick} onBack={() => setScreen('difficulty')} />;
   if (screen === 'fixWindow') return <FixWindowScreen practice={acquisitionChoice} difficulty={difficulty} onComplete={handleFixWindowComplete} onBack={() => setScreen('acquire')} />;
+  if (screen === 'groupChallengeSetup') return <GroupChallengeSetupScreen onStartChallenge={(data) => { setChallengeData({ code: data.code, playerName: data.playerName }); setDifficulty(data.difficulty); setGroupChallengeData(data); setStartMode('scratch'); setScreen('spaceSelection'); }} onViewResults={(code) => { setGroupChallengeData({ code }); setScreen('groupChallengeResults'); }} onBack={() => setScreen('title')} />;
+  if (screen === 'groupChallengeResults') return <GroupChallengeResultsScreen code={groupChallengeData?.code} onBack={() => setScreen('title')} onPlayAgain={(data) => { setChallengeData({ code: data.code, playerName: data.playerName }); setDifficulty(data.difficulty); setStartMode('scratch'); setScreen('spaceSelection'); }} />;
+  if (screen === 'tournamentSetup') return <TournamentSetupScreen onViewBracket={(code) => { setTournamentData({ code }); setScreen('tournamentBracket'); }} onBack={() => setScreen('title')} />;
+  if (screen === 'tournamentBracket') return <TournamentBracketScreen code={tournamentData?.code} playerName={tournamentData?.playerName} onPlayMatch={(matchup) => { setChallengeData({ code: matchup.seed.toString(), playerName: tournamentData?.playerName }); setDifficulty(DIFFICULTY_MODES.find(d => d.id === 'intermediate') || DIFFICULTY_MODES[1]); setStartMode('scratch'); setScreen('spaceSelection'); }} onBack={() => setScreen('title')} />;
   return (
     <GameErrorBoundary>
       <GameScreen startMode={startMode} acquisitionChoice={acquisitionChoice} fixWindowData={fixWindowData} buildoutData={buildoutData} difficulty={difficulty}

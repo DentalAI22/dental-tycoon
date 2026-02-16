@@ -1436,12 +1436,14 @@ export function saveToLeaderboard(entry) {
   const board = getLeaderboard();
   board.push({
     ...entry,
+    playerName: entry.playerName || 'Anonymous',
+    challengeCode: entry.challengeCode || null,
     date: new Date().toISOString(),
+    timestamp: Date.now(),
     id: Date.now(),
   });
-  // Sort by overall score descending, keep top 20
   board.sort((a, b) => b.overallScore - a.overallScore);
-  const trimmed = board.slice(0, 20);
+  const trimmed = board.slice(0, 50);
   try {
     localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(trimmed));
   } catch { /* storage full */ }
@@ -1452,6 +1454,20 @@ export function clearLeaderboard() {
   localStorage.removeItem(LEADERBOARD_KEY);
 }
 
+export function getDailyLeaderboard() {
+  const board = getLeaderboard();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  return board
+    .filter(e => (e.timestamp || 0) >= todayStart.getTime())
+    .sort((a, b) => b.overallScore - a.overallScore)
+    .slice(0, 10);
+}
+
+export function getAllTimeLeaderboard() {
+  return getLeaderboard().sort((a, b) => b.overallScore - a.overallScore).slice(0, 10);
+}
+
 export function getLeaderboardByMode(modeName) {
   return getLeaderboard().filter(e => e.difficulty === modeName).sort((a, b) => b.overallScore - a.overallScore);
 }
@@ -1459,6 +1475,238 @@ export function getLeaderboardByMode(modeName) {
 export function getLeaderboardModes() {
   const board = getLeaderboard();
   return [...new Set(board.map(e => e.difficulty).filter(Boolean))];
+}
+
+// ─── GROUP CHALLENGES ───
+const GROUP_CHALLENGE_KEY = 'dental_tycoon_group_challenges';
+
+export function createGroupChallenge({ name, code, creatorName, playerCap, deadline, difficulty }) {
+  const groups = JSON.parse(localStorage.getItem(GROUP_CHALLENGE_KEY) || '{}');
+  groups[code] = {
+    name, code, creatorName,
+    playerCap: playerCap || null,
+    deadline: deadline || null,
+    difficultyId: difficulty.id,
+    difficultyName: difficulty.name,
+    createdAt: new Date().toISOString(),
+    seed: codeToSeed(code),
+  };
+  try { localStorage.setItem(GROUP_CHALLENGE_KEY, JSON.stringify(groups)); } catch {}
+  return groups[code];
+}
+
+export function getGroupChallenge(code) {
+  try { return (JSON.parse(localStorage.getItem(GROUP_CHALLENGE_KEY) || '{}'))[code] || null; } catch { return null; }
+}
+
+export function getAllGroupChallenges() {
+  try { return JSON.parse(localStorage.getItem(GROUP_CHALLENGE_KEY) || '{}'); } catch { return {}; }
+}
+
+export function getGroupChallengeStats(code) {
+  const results = getChallengeResults(code);
+  if (results.length === 0) return null;
+  const scores = results.map(r => r.overallScore || 0);
+  return {
+    playerCount: results.length,
+    avgScore: Math.round(scores.reduce((a, b) => a + b, 0) / scores.length),
+    highScore: Math.max(...scores),
+    lowScore: Math.min(...scores),
+    bankruptCount: results.filter(r => r.outcome === 'Bankrupt').length,
+  };
+}
+
+// ─── BRACKET TOURNAMENTS ───
+const TOURNAMENT_KEY = 'dental_tycoon_tournaments';
+
+export function createTournament({ name, hostName, code, maxPlayers }) {
+  const tournaments = JSON.parse(localStorage.getItem(TOURNAMENT_KEY) || '{}');
+  tournaments[code] = {
+    name, code, hostName,
+    maxPlayers: Math.min(maxPlayers || 16, 32),
+    status: 'lobby',
+    players: [{ name: hostName, id: Date.now(), joinedAt: new Date().toISOString() }],
+    bracket: null, rounds: [], currentRound: 0,
+    createdAt: new Date().toISOString(), champion: null,
+    difficultyId: 'intermediate',
+  };
+  try { localStorage.setItem(TOURNAMENT_KEY, JSON.stringify(tournaments)); } catch {}
+  return tournaments[code];
+}
+
+export function joinTournament(code, playerName) {
+  const tournaments = JSON.parse(localStorage.getItem(TOURNAMENT_KEY) || '{}');
+  const t = tournaments[code];
+  if (!t || t.status !== 'lobby') return null;
+  if (t.players.length >= t.maxPlayers) return null;
+  if (t.players.some(p => p.name === playerName)) return t;
+  t.players.push({ name: playerName, id: Date.now(), joinedAt: new Date().toISOString() });
+  try { localStorage.setItem(TOURNAMENT_KEY, JSON.stringify(tournaments)); } catch {}
+  return t;
+}
+
+export function generateBracket(code) {
+  const tournaments = JSON.parse(localStorage.getItem(TOURNAMENT_KEY) || '{}');
+  const t = tournaments[code];
+  if (!t) return null;
+  const players = [...t.players];
+  const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(2, players.length))));
+  while (players.length < bracketSize) players.push({ name: 'BYE', id: null, isBye: true });
+  const rng = mulberry32(codeToSeed(code));
+  for (let i = players.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [players[i], players[j]] = [players[j], players[i]];
+  }
+  const matchups = [];
+  for (let i = 0; i < players.length; i += 2) {
+    const hasBye = players[i].isBye || players[i + 1].isBye;
+    matchups.push({
+      id: `r1_m${matchups.length}`, player1: players[i], player2: players[i + 1],
+      seed: codeToSeed(code) + matchups.length + 1000,
+      result1: null, result2: null,
+      winner: hasBye ? (players[i].isBye ? players[i + 1].name : players[i].name) : null,
+    });
+  }
+  const totalRounds = Math.log2(bracketSize);
+  t.bracket = { size: bracketSize, totalRounds };
+  t.rounds = [{ round: 1, matchups }];
+  for (let r = 2; r <= totalRounds; r++) {
+    const mc = bracketSize / Math.pow(2, r);
+    const rm = [];
+    for (let i = 0; i < mc; i++) rm.push({ id: `r${r}_m${i}`, player1: null, player2: null, seed: codeToSeed(code) + r * 1000 + i, result1: null, result2: null, winner: null });
+    t.rounds.push({ round: r, matchups: rm });
+  }
+  // Advance BYE winners to round 2
+  for (const m of matchups) {
+    if (m.winner) advanceWinnerInternal(t, 1, m);
+  }
+  t.status = 'active';
+  t.currentRound = 1;
+  try { localStorage.setItem(TOURNAMENT_KEY, JSON.stringify(tournaments)); } catch {}
+  return t;
+}
+
+function advanceWinnerInternal(tournament, roundNum, matchup) {
+  if (roundNum >= tournament.rounds.length) return;
+  const nextRound = tournament.rounds[roundNum];
+  const matchupIndex = tournament.rounds[roundNum - 1].matchups.indexOf(matchup);
+  const nextMatchupIndex = Math.floor(matchupIndex / 2);
+  const nextMatchup = nextRound.matchups[nextMatchupIndex];
+  if (!nextMatchup) return;
+  const winnerPlayer = matchup.player1?.name === matchup.winner ? matchup.player1 : matchup.player2;
+  if (matchupIndex % 2 === 0) nextMatchup.player1 = winnerPlayer;
+  else nextMatchup.player2 = winnerPlayer;
+  if (nextMatchup.player1?.isBye) { nextMatchup.winner = nextMatchup.player2?.name; advanceWinnerInternal(tournament, roundNum + 1, nextMatchup); }
+  if (nextMatchup.player2?.isBye) { nextMatchup.winner = nextMatchup.player1?.name; advanceWinnerInternal(tournament, roundNum + 1, nextMatchup); }
+}
+
+export function submitTournamentResult(code, roundNum, matchupId, playerName, result) {
+  const tournaments = JSON.parse(localStorage.getItem(TOURNAMENT_KEY) || '{}');
+  const t = tournaments[code];
+  if (!t) return null;
+  const round = t.rounds[roundNum - 1];
+  if (!round) return null;
+  const matchup = round.matchups.find(m => m.id === matchupId);
+  if (!matchup) return null;
+  if (matchup.player1?.name === playerName) matchup.result1 = result;
+  if (matchup.player2?.name === playerName) matchup.result2 = result;
+  if (matchup.result1 && matchup.result2) {
+    matchup.winner = (matchup.result1.overallScore || 0) >= (matchup.result2.overallScore || 0) ? matchup.player1.name : matchup.player2.name;
+    advanceWinnerInternal(t, roundNum, matchup);
+    // Check if tournament complete
+    const finalMatch = t.rounds[t.rounds.length - 1].matchups[0];
+    if (finalMatch?.winner) {
+      t.status = 'complete';
+      t.champion = finalMatch.winner;
+      const champResult = finalMatch.result1?.overallScore >= finalMatch.result2?.overallScore ? finalMatch.result1 : finalMatch.result2;
+      if (champResult) saveToLeaderboard({ ...champResult, playerName: finalMatch.winner, isTournamentChampion: true, tournamentName: t.name, tournamentCode: t.code });
+    }
+  }
+  try { localStorage.setItem(TOURNAMENT_KEY, JSON.stringify(tournaments)); } catch {}
+  return t;
+}
+
+export function getTournament(code) {
+  try { return (JSON.parse(localStorage.getItem(TOURNAMENT_KEY) || '{}'))[code] || null; } catch { return null; }
+}
+
+export function getAllTournaments() {
+  try { return JSON.parse(localStorage.getItem(TOURNAMENT_KEY) || '{}'); } catch { return {}; }
+}
+
+// ─── DEV HELPERS ───
+export function devSimulateFinishedGame() {
+  const rng = mulberry32(Date.now());
+  const score = Math.floor(rng() * 600) + 300;
+  const names = ['DrMolar', 'ToothFairy', 'CavityCrusher', 'FlossKing', 'BraceYourself', 'FillingGood', 'CrownRoyal', 'PlaqueFighter'];
+  const modes = ['Solo Startup', 'Growing Practice', 'Multi-Doctor Empire'];
+  const code = generateChallengeCode();
+  const result = {
+    overallScore: score,
+    overallGrade: score >= 850 ? 'A+' : score >= 750 ? 'A' : score >= 650 ? 'B+' : score >= 550 ? 'B' : score >= 450 ? 'C' : 'D',
+    profitMargin: rng() * 40 - 5, overheadRatio: 55 + rng() * 30,
+    monthlyRevenue: 15000 + rng() * 60000, monthlyProfit: -5000 + rng() * 30000,
+    finalCash: Math.floor(-20000 + rng() * 200000), finalPatients: Math.floor(20 + rng() * 300),
+    finalReputation: Number((2 + rng() * 3).toFixed(1)), staffCount: Math.floor(2 + rng() * 8),
+    day: 180, difficulty: modes[Math.floor(rng() * modes.length)],
+    outcome: rng() > 0.25 ? 'Completed' : 'Bankrupt',
+    playerName: names[Math.floor(rng() * names.length)],
+    challengeCode: code,
+  };
+  saveToLeaderboard(result);
+  return result;
+}
+
+export function devCreateGroupWith8Players(code) {
+  const names = ['DrMolar', 'ToothFairy', 'CavityCrusher', 'FlossKing', 'BraceYourself', 'FillingGood', 'CrownRoyal', 'PlaqueFighter'];
+  const rng = mulberry32(42);
+  createGroupChallenge({ name: 'Dev Test Group', code, creatorName: names[0], difficulty: DIFFICULTY_MODES[1] });
+  for (const name of names) {
+    const score = Math.floor(300 + rng() * 600);
+    saveChallenge(code, name, {
+      overallScore: score,
+      overallGrade: score >= 750 ? 'A' : score >= 550 ? 'B' : score >= 400 ? 'C' : 'D',
+      finalCash: Math.floor(-10000 + rng() * 150000), finalPatients: Math.floor(20 + rng() * 250),
+      finalReputation: Number((2 + rng() * 3).toFixed(1)), staffCount: Math.floor(2 + rng() * 7),
+      outcome: rng() > 0.3 ? 'Completed' : 'Bankrupt',
+      overheadRatio: 50 + rng() * 35, profitMargin: -10 + rng() * 35,
+      playerName: name, monthlyRevenue: 10000 + rng() * 50000, monthlyProfit: -5000 + rng() * 25000,
+    });
+  }
+}
+
+export function devCreateTournamentWith8Players(code) {
+  const t = createTournament({ name: 'Dev Test Tournament', hostName: 'DrMolar', code, maxPlayers: 8 });
+  const names = ['ToothFairy', 'CavityCrusher', 'FlossKing', 'BraceYourself', 'FillingGood', 'CrownRoyal', 'PlaqueFighter'];
+  for (const name of names) joinTournament(code, name);
+  generateBracket(code);
+  const tournament = getTournament(code);
+  if (!tournament) return null;
+  const rng = mulberry32(12345);
+  for (let r = 0; r < tournament.rounds.length; r++) {
+    for (const matchup of tournament.rounds[r].matchups) {
+      if (matchup.winner) continue;
+      if (!matchup.player1 || !matchup.player2) continue;
+      if (matchup.player1.isBye || matchup.player2.isBye) continue;
+      const s1 = Math.floor(300 + rng() * 600);
+      const s2 = Math.floor(300 + rng() * 600);
+      submitTournamentResult(code, r + 1, matchup.id, matchup.player1.name, {
+        overallScore: s1, overallGrade: s1 > 550 ? 'B' : 'C',
+        finalCash: Math.floor(rng() * 100000), finalPatients: Math.floor(rng() * 200),
+        finalReputation: Number((2 + rng() * 3).toFixed(1)), outcome: 'Completed',
+        overheadRatio: 55 + rng() * 25, profitMargin: rng() * 30,
+        monthlyRevenue: 15000 + rng() * 40000, monthlyProfit: -5000 + rng() * 25000,
+      });
+      submitTournamentResult(code, r + 1, matchup.id, matchup.player2.name, {
+        overallScore: s2, overallGrade: s2 > 550 ? 'B' : 'C',
+        finalCash: Math.floor(rng() * 100000), finalPatients: Math.floor(rng() * 200),
+        finalReputation: Number((2 + rng() * 3).toFixed(1)), outcome: 'Completed',
+        overheadRatio: 55 + rng() * 25, profitMargin: rng() * 30,
+        monthlyRevenue: 15000 + rng() * 40000, monthlyProfit: -5000 + rng() * 25000,
+      });
+    }
+  }
+  return getTournament(code);
 }
 
 // ─── BUILDOUT / SPACE ───
