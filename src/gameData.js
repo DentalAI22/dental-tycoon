@@ -1513,8 +1513,10 @@ export const EQUIPMENT = [
     description: 'Fast-cycle autoclave with tracking. Better compliance, faster turnaround.' },
   { id: 'air_purifier', name: 'HEPA Air Purification', cost: 6000, icon: '🌀', category: 'essential', maintenanceCost: 30, breakdownChance: 0.005, cleanlinessBonus: 12, satisfactionBonus: 3,
     description: 'Medical-grade air filtration. Reduces airborne contaminants.' },
-  { id: 'compressor', name: 'Dental Air Compressor', cost: 5000, icon: '💨', category: 'essential', maintenanceCost: 40, breakdownChance: 0.02,
-    description: 'Powers your handpieces. Without this, your drills don\'t work.' },
+  { id: 'compressor', name: 'Dental Air Compressor', cost: 5000, icon: '💨', category: 'essential', maintenanceCost: 40, breakdownChance: 0.025, required: true, criticalEquipment: true,
+    description: 'REQUIRED. Powers all handpieces and air-water syringes. If this goes down, the entire practice stops. Needs regular oil changes and filter replacements.' },
+  { id: 'vacuum_pump', name: 'Dental Vacuum/Suction Pump', cost: 4500, icon: '🔧', category: 'essential', maintenanceCost: 35, breakdownChance: 0.025, required: true, criticalEquipment: true,
+    description: 'REQUIRED. Provides suction for every procedure. Wet-ring or dry vacuum — either way, if it fails, you\'re sending patients home. Traps need regular cleaning.' },
   // Specialty — high revenue, high cost
   { id: 'laser', name: 'Soft Tissue Laser', cost: 45000, revenueBonus: 400, icon: '✨', category: 'specialty', maintenanceCost: 150, breakdownChance: 0.025,
     description: 'Gum treatments, frenectomies, whitening boost. Specialists love these.' },
@@ -1913,7 +1915,7 @@ export const ACQUISITION_OPTIONS = [
     id: 'small', name: 'Small Solo Practice', price: 250000,
     description: 'A small practice with 2 operatories, aging equipment, and a small patient base. The previous dentist retired.',
     patients: 80, reputation: 3.2, sqft: 900, rent: 2500, actualOps: 2, sqftPerOp: 450, maxOps: 2,
-    equipment: ['basic_chair', 'basic_chair', 'xray', 'sterilizer'],
+    equipment: ['basic_chair', 'basic_chair', 'xray', 'sterilizer', 'compressor', 'vacuum_pump'],
     builtOutRooms: ['basic_ops', 'basic_ops', 'waiting_area', 'sterilization'],
     staff: [
       { role: 'Front Desk', skill: 45, attitude: 70, reliability: 60 },
@@ -1927,7 +1929,7 @@ export const ACQUISITION_OPTIONS = [
     id: 'medium', name: 'Growing Family Practice', price: 500000,
     description: 'A well-run family practice with 4 operatories, decent equipment, and solid reviews. Owner is relocating.',
     patients: 250, reputation: 4.1, sqft: 1800, rent: 5000, actualOps: 4, sqftPerOp: 450, maxOps: 4,
-    equipment: ['basic_chair', 'basic_chair', 'premium_chair', 'premium_chair', 'xray', 'panoramic_xray', 'sterilizer'],
+    equipment: ['basic_chair', 'basic_chair', 'premium_chair', 'premium_chair', 'xray', 'panoramic_xray', 'sterilizer', 'compressor', 'vacuum_pump'],
     builtOutRooms: ['basic_ops', 'basic_ops', 'premium_ops', 'premium_ops', 'waiting_area', 'sterilization', 'xray_room', 'break_room'],
     staff: [
       { role: 'Hygienist', skill: 72, attitude: 80, reliability: 75 },
@@ -1943,7 +1945,7 @@ export const ACQUISITION_OPTIONS = [
     id: 'large', name: 'Established Multi-Doctor Practice', price: 900000,
     description: 'A large practice with 6 operatories but way too much space. Staff has morale issues and cleanliness has slipped.',
     patients: 500, reputation: 3.8, sqft: 3500, rent: 9000, actualOps: 6, sqftPerOp: 583, maxOps: 8,
-    equipment: ['premium_chair','premium_chair','premium_chair','premium_chair','basic_chair','basic_chair','panoramic_xray','xray','sterilizer','laser','autoclave'],
+    equipment: ['premium_chair','premium_chair','premium_chair','premium_chair','basic_chair','basic_chair','panoramic_xray','xray','sterilizer','compressor','vacuum_pump','laser','autoclave'],
     builtOutRooms: ['premium_ops','premium_ops','premium_ops','premium_ops','basic_ops','basic_ops','premium_waiting','sterilization','xray_room','lab','break_room','private_office'],
     staff: [
       { role: 'Hygienist', skill: 80, attitude: 40, reliability: 60 },
@@ -2031,6 +2033,8 @@ function generatePracticeEquipment(sqft, problems, ops) {
     if (Math.random() > 0.5) equip.push('intraoral_camera');
   }
   equip.push('sterilizer');
+  // Every practice must have a compressor and vacuum pump
+  equip.push('compressor', 'vacuum_pump');
   return equip;
 }
 
@@ -2433,10 +2437,15 @@ export function calculateDailyStats(gameState) {
     return sum + (def?.maintenanceCost || 0);
   }, 0) / 30 * maintenanceMultiplier);
 
-  // Supply costs (affected by supply_rep relationship)
+  // Supply costs — affected by supply_rep relationship AND supply creep over time
+  // Bad supply management = costs silently increase. Good rep = bulk discounts and better pricing.
   const supplyRelationship = (relationships || {}).supply_rep || 50;
-  const supplyMultiplier = supplyRelationship > 70 ? 0.8 : supplyRelationship < 30 ? 1.3 : 1;
-  const dailySupplies = Math.round(actualPatients * 15 * supplyMultiplier);
+  const baseSupplyMultiplier = supplyRelationship > 70 ? 0.75 : supplyRelationship > 50 ? 0.9 : supplyRelationship < 25 ? 1.4 : supplyRelationship < 40 ? 1.2 : 1.0;
+  // Supply creep: costs drift up ~1% per month if supply relationship is below 50 (nobody is watching)
+  const gameDay = gameState.day || 1;
+  const supplyCreep = supplyRelationship < 50 ? 1 + (Math.floor(gameDay / 30) * 0.015) : 1.0;
+  const supplyPerPatient = 18; // $18/patient/day in consumables (gloves, bibs, impression material, composites, anesthetic, etc.)
+  const dailySupplies = Math.round(actualPatients * supplyPerPatient * baseSupplyMultiplier * supplyCreep);
 
   // Insurance admin overhead — each plan costs money to manage
   const dailyInsuranceAdmin = Math.round((acceptedInsurance || []).reduce((sum, id) => {
@@ -2511,6 +2520,7 @@ export function calculateDailyStats(gameState) {
     dailyDemand, actualPatients,
     dailyRevenue, dailySalaries, dailyMaintenance, dailySupplies, dailyRent,
     dailyOverhead, dailyInsuranceAdmin, dailyMarketing, dailyUpgradeCosts, dailyLoanPayment,
+    supplyCreep, supplyPerPatient: Math.round(supplyPerPatient * baseSupplyMultiplier * supplyCreep),
     totalDailyCosts, dailyProfit,
     reputationChange, satisfactionScore: adjustedSatisfaction,
     hasFrontDesk, assistantBonus,

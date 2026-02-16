@@ -1099,10 +1099,14 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
   const hasDentist = staff.some(s => s.role === 'Dentist' || s.role === 'Specialist');
   const hasFrontDesk = staff.some(s => s.role === 'Front Desk' || s.role === 'Office Manager');
   const hasAnyMarketing = marketing.length > 0;
+  const hasCompressor = equipment.includes('compressor');
+  const hasVacuum = equipment.includes('vacuum_pump');
 
   const readinessChecks = [
     { label: 'Dental chair (patients need somewhere to sit!)', met: hasChair },
     { label: 'Dentist or Specialist (someone to treat patients)', met: hasDentist },
+    { label: 'Air compressor (powers all handpieces)', met: hasCompressor },
+    { label: 'Vacuum/suction pump (required for procedures)', met: hasVacuum },
     { label: 'Front desk (someone to greet and schedule)', met: hasFrontDesk },
     { label: 'Marketing active (no marketing = no patients)', met: hasAnyMarketing },
     { label: `Cash reserves (${monthsOfRunway}+ months of runway)`, met: monthsOfRunway >= 2 },
@@ -2733,6 +2737,14 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
               <div className="fin-card">
                 <div className="fin-label">Daily Overhead</div>
                 <div className="fin-value red">-${stats.dailyOverhead.toLocaleString()}</div>
+                <div style={{ fontSize: '9px', color: '#64748b', marginTop: '3px', lineHeight: 1.4 }}>
+                  Supplies: ${stats.dailySupplies}{stats.supplyCreep > 1.01 ? <span style={{ color: '#ef4444' }}> (+{Math.round((stats.supplyCreep - 1) * 100)}% creep!)</span> : ''} · Rent: ${stats.dailyRent} · Maint: ${stats.dailyMaintenance} · Ins Admin: ${stats.dailyInsuranceAdmin}
+                </div>
+                {stats.supplyPerPatient > 20 && (
+                  <div style={{ fontSize: '9px', color: '#ef4444', marginTop: '2px' }}>
+                    ⚠ ${stats.supplyPerPatient}/patient — above $18 benchmark. Improve supply rep relationship!
+                  </div>
+                )}
               </div>
               <div className="fin-card">
                 <div className="fin-label">Daily Marketing</div>
@@ -3461,9 +3473,14 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       const hasDentist = (bd.staff || []).some(s => s.role === 'Dentist' || s.role === 'Specialist');
       const hasMarketing = (bd.activeMarketing || []).length > 0;
 
+      const hasCompressor = (bd.equipment || []).includes('compressor');
+      const hasVacuum = (bd.equipment || []).includes('vacuum_pump');
+
       const setupWarnings = [];
       if (!hasChair) setupWarnings.push('NO dental chairs — patients have nowhere to sit!');
       if (!hasDentist) setupWarnings.push('NO dentist — you can\'t treat anyone!');
+      if (!hasCompressor) setupWarnings.push('NO air compressor — your handpieces won\'t work! You literally cannot drill.');
+      if (!hasVacuum) setupWarnings.push('NO vacuum/suction pump — you can\'t do procedures without suction!');
       if (!hasMarketing) setupWarnings.push('NO marketing — nobody knows you exist!');
 
       return {
@@ -4149,20 +4166,62 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         ? (schedule[prev.day] || []).some(e => e.type === 'equipment_breakdown')
         : Math.random() < 0.02 * diff.eventFrequency;
       if (diff.equipBreakdownEnabled && breakdownToday) {
-        const chairEquip = prev.equipment.filter(eq => {
+        const equipTechRel = prev.relationships?.equipment_tech || 50;
+        const supplyRepRel = prev.relationships?.supply_rep || 50;
+
+        // All breakable equipment — chairs, compressors, pumps, diagnostics, everything
+        const breakableEquip = prev.equipment.filter(eq => {
           const def = EQUIPMENT.find(e => e.id === eq);
-          return def && def.patientsPerDay > 0 && def.breakdownChance;
+          return def && def.breakdownChance && Math.random() < def.breakdownChance * 2;
         });
-        if (chairEquip.length > 0) {
-          const brokenChair = schedule ? chairEquip[0] : chairEquip[Math.floor(Math.random() * chairEquip.length)];
-          const def = EQUIPMENT.find(e => e.id === brokenChair);
+
+        if (breakableEquip.length > 0) {
+          const brokenId = schedule ? breakableEquip[0] : breakableEquip[Math.floor(Math.random() * breakableEquip.length)];
+          const def = EQUIPMENT.find(e => e.id === brokenId);
           const repairCost = Math.round(def.cost * 0.15);
-          // Safety measure: equipment with maintenance budget costs less to fix
-          const hasGoodMaintenance = (prev.relationships?.equipment_tech || 50) > 65;
-          const actualCost = hasGoodMaintenance ? Math.round(repairCost * 0.7) : repairCost;
-          newLog.push({ day: prev.day, text: `${def.name} needs repair! Cost: $${actualCost.toLocaleString()}.${hasGoodMaintenance ? ' (Good tech relationship = 30% discount!)' : ''} Operatory DOWN until fixed.`, type: 'negative' });
-          cashDelta -= actualCost;
-          patientDelta -= (schedule ? (prev.day % 3) + 1 : Math.floor(Math.random() * 3) + 1);
+          const isCritical = def.criticalEquipment; // compressor or vacuum pump
+
+          // Equipment rep relationship determines outcome
+          if (equipTechRel > 75 && Math.random() < 0.4) {
+            // Great relationship = sometimes free fix with fun narrative
+            const freeFixStories = [
+              `${def.name} started acting up, but luckily your equipment rep owed you one from that golf game last week — ran out and fixed it for FREE!`,
+              `${def.name} went down, but your equipment tech happened to be in the area and swung by — no charge. "You always take care of me," he said.`,
+              `${def.name} broke mid-morning, but one call to your equipment rep and he was here in 20 minutes. Free repair — perks of a good relationship.`,
+              `The ${def.name.toLowerCase()} made a terrible noise. Your equipment guy picked up on the first ring. "I'll be there in 15." No bill. That's what relationships are for.`,
+            ];
+            newLog.push({ day: prev.day, text: freeFixStories[prev.day % freeFixStories.length], type: 'positive' });
+            if (isCritical) patientDelta -= 1; // minor disruption even with quick fix
+          } else if (equipTechRel > 60) {
+            // Good relationship = discounted fix
+            const actualCost = Math.round(repairCost * 0.6);
+            newLog.push({ day: prev.day, text: `${def.name} needs repair! Cost: $${actualCost.toLocaleString()} (good tech relationship = 40% off).${isCritical ? ' PRACTICE STOPPED until fixed.' : ''}`, type: 'negative' });
+            cashDelta -= actualCost;
+            patientDelta -= isCritical ? (Math.floor(Math.random() * 3) + 3) : (Math.floor(Math.random() * 2) + 1);
+          } else {
+            // Bad/no relationship = full price, slow response, more patient loss
+            const penaltyMult = equipTechRel < 30 ? 1.3 : 1.0; // bad relationship = price gouging
+            const actualCost = Math.round(repairCost * penaltyMult);
+            const badRepStories = isCritical ? [
+              `${def.name} DIED. No relationship with an equipment tech means you're calling around begging for emergency service. $${actualCost.toLocaleString()} and half the day lost.`,
+              `The ${def.name.toLowerCase()} quit working. You don't have a tech on speed dial so you're Googling repair services at 8am. $${actualCost.toLocaleString()} emergency call.`,
+            ] : [
+              `${def.name} needs repair! Cost: $${actualCost.toLocaleString()}. No tech relationship means full price and slow service.`,
+            ];
+            newLog.push({ day: prev.day, text: badRepStories[prev.day % badRepStories.length], type: 'negative' });
+            cashDelta -= actualCost;
+            patientDelta -= isCritical ? (Math.floor(Math.random() * 4) + 4) : (Math.floor(Math.random() * 3) + 1);
+          }
+        }
+      }
+
+      // Supply expense creep warning (every 60 days, check if supplies are getting out of control)
+      if (prev.day % 60 === 0 && prev.day > 0) {
+        const supplyRel = prev.relationships?.supply_rep || 50;
+        if (supplyRel < 40) {
+          newLog.push({ day: prev.day, text: `Supply costs are creeping up! Without a good supply rep relationship, nobody is negotiating your prices. Gloves, composites, impression material — it all adds up. Your cost per patient is above benchmark.`, type: 'warning' });
+        } else if (supplyRel > 70) {
+          newLog.push({ day: prev.day, text: `Your supply rep just locked in bulk pricing for the quarter. Good relationships = better margins on consumables.`, type: 'positive' });
         }
       }
 
