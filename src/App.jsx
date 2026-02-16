@@ -271,7 +271,7 @@ function DifficultySelectionScreen({ onSelect, onBack, startMode }) {
         : 'Same loan, same market. Difficulty controls how many systems you have to manage — beginners get training wheels, experts get chaos.'
       }</p>
       <div className="practice-list">
-        {DIFFICULTY_MODES.map(mode => {
+        {DIFFICULTY_MODES.filter(mode => !mode.startModes || mode.startModes.includes(startMode)).map(mode => {
           const modeName = isAcquire ? (mode.acquireName || mode.name) : mode.name;
           const modeSubtitle = isAcquire ? (mode.acquireSubtitle || mode.subtitle) : mode.subtitle;
           const modeDesc = isAcquire ? (mode.acquireDescription || mode.description) : mode.description;

@@ -14,11 +14,7 @@ export const DIFFICULTY_MODES = [
     id: 'beginner', name: 'Solo Startup', icon: '🟢',
     subtitle: 'Small Practice, Big Dreams',
     description: 'A small solo practice startup. $500K loan, 1-2 operatories. Staff drama and equipment breakdowns turned OFF so you can focus on the fundamentals: get patients, treat them well, control costs.',
-    // Acquisition flavor
-    acquireName: 'Small Practice',
-    acquireSubtitle: 'Simple, Manageable, Low Risk',
-    acquireDescription: 'Buy a small solo practice — 1-2 operatories, a handful of patients, one hygienist. Low overhead, fewer moving parts, and less that can go wrong. Income starts modest but the margins are forgiving. Perfect for learning how to run a practice without getting crushed by overhead.',
-    acquireFeatures: ['90-day season', '$500K acquisition', 'Existing patients', 'Small staff', 'Fewer surprises', 'Learn the ropes'],
+    startModes: ['scratch'], // Solo Startup is ONLY for scratch — you can't "acquire" a startup
     loanAmount: 500000,
     gameDuration: 90,         // 90-day season
     rentMultiplier: 1.0,
@@ -39,10 +35,41 @@ export const DIFFICULTY_MODES = [
     features: ['90-day season', '$500K loan', 'Helpful tips', 'No staff drama', 'No breakdowns', 'Learn the basics'],
   },
   {
+    id: 'acquire_small', name: 'Small Practice Purchase', icon: '🟢',
+    subtitle: 'Retiring Dentist, Turnkey Operation',
+    description: 'Buy a small solo practice from a retiring dentist. $300K purchase price — the practice comes with 40 existing patients, 2 staff members, basic equipment (some outdated), and an existing lease. Lower risk than starting from scratch, but you inherit whatever the previous owner left behind: aging X-ray machine, a hygienist who may not like the new boss, and patients who might leave when their old dentist retires.',
+    startModes: ['acquire'], // Acquisition ONLY — this is buying an existing practice
+    loanAmount: 300000,
+    gameDuration: 90,
+    rentMultiplier: 0.9,      // inherited lease is slightly favorable
+    salaryMultiplier: 1.0,
+    eventFrequency: 0.3,
+    patientGrowthBonus: 1.1,  // some patients stay, modest growth
+    maintenanceMultiplier: 1.2, // aging equipment needs more maintenance
+    supplyMultiplier: 1.0,
+    startingReputation: 3.2,  // practice has some existing reputation
+    overdraftLimit: -100000,
+    showHints: true,
+    interestRate: 0.055,      // slightly better rate — existing practice is collateral
+    staffDramaEnabled: false,
+    equipBreakdownEnabled: false,
+    insuranceAuditsEnabled: false,
+    cashSpiralEnabled: false,
+    competitorEventsEnabled: false,
+    // Acquisition-specific properties
+    isAcquisition: true,
+    inheritedPatients: 40,
+    inheritedStaffCount: 2,
+    inheritedEquipmentAge: 'aging', // some equipment is outdated
+    patientRetentionRisk: 0.15, // 15% of patients may leave when old dentist retires
+    goodwillValue: 80000,     // what you're paying for beyond tangible assets
+    features: ['90-day season', '$300K purchase', '40 inherited patients', '2 existing staff', 'Aging equipment', 'Lower risk, lower upside'],
+  },
+  {
     id: 'intermediate', name: 'Growing Practice', icon: '🟡',
     subtitle: 'Real Dentistry, Real Problems',
     description: 'A mid-size practice with real challenges. $750K loan, 3-4 operatories. Staff have morale issues, equipment breaks, insurance companies audit you. You need to hire right, train well, and balance growth with overhead.',
-    // Acquisition flavor
+    startModes: ['scratch', 'acquire'],
     acquireName: 'Mid-Size Practice',
     acquireSubtitle: 'Established But Needs Work',
     acquireDescription: 'Acquire a mid-size practice — 3-4 operatories, existing patient base, staff already in place. The previous owner left some problems behind: aging equipment, staff morale issues, insurance contracts that need renegotiating. Revenue is there but so is the overhead. You need to stabilize and grow without bleeding cash.',
@@ -70,7 +97,7 @@ export const DIFFICULTY_MODES = [
     id: 'expert', name: 'Multi-Doctor Empire', icon: '🔴',
     subtitle: 'Big Practice, Big Risk',
     description: 'A large multi-doctor practice. $1.2M loan — massive overhead. You need to produce $2-3M/year just to stay afloat. Associates, specialists, big staff. Competitors poach your people, patients expect premium service, one bad month and the cash spiral starts.',
-    // Acquisition flavor
+    startModes: ['scratch', 'acquire'],
     acquireName: 'Large Group Practice',
     acquireSubtitle: 'Big Investment, Big Overhead, Big Upside',
     acquireDescription: 'Buy a large multi-doctor group practice — $1.2M deal. Multiple associates, specialists, big staff roster, high-volume patient flow. Revenue potential is massive but so are the bills. Payroll alone could sink you. Competitors are circling to poach your best people. One bad quarter and the cash spiral starts. The reward? If you get it right, you\'re running a dental empire.',
@@ -100,7 +127,7 @@ export const DIFFICULTY_MODES = [
     id: 'hell', name: 'Hell Mode', icon: '💀',
     subtitle: 'Everything Goes Wrong',
     description: 'SPECIAL EVENT. $1.5M loan, 365 days, aggressive competitors, staff constantly threatening to leave, equipment breaks weekly, insurance clawbacks, malpractice suits, embezzlement. The highest scores in the game come from surviving this. Can you?',
-    // Acquisition flavor
+    startModes: ['scratch', 'acquire'],
     acquireName: 'Hell Mode Acquisition',
     acquireSubtitle: 'You Bought a Disaster',
     acquireDescription: 'You just bought a $1.5M practice that the previous owner ran into the ground. Bad reviews, staff ready to quit, equipment falling apart, insurance carriers threatening to drop you, and competitors circling. The highest scores come from turning this around. Can you?',
@@ -2006,6 +2033,7 @@ const PROBLEM_POOL = [
 
 const ACQUISITION_SCALING = {
   beginner:     { priceRange: [150000, 300000], patientRange: [40, 100], staffRange: [1, 2], problemRange: [0, 1], sqftRange: [800, 1200], repRange: [2.8, 3.5], revenuePerPatient: 280 },
+  acquire_small: { priceRange: [150000, 300000], patientRange: [30, 80], staffRange: [1, 2], problemRange: [0, 1], sqftRange: [700, 1100], repRange: [2.8, 3.5], revenuePerPatient: 280 },
   intermediate: { priceRange: [250000, 600000], patientRange: [80, 300], staffRange: [2, 4], problemRange: [1, 2], sqftRange: [1200, 2500], repRange: [2.5, 4.0], revenuePerPatient: 220 },
   expert:       { priceRange: [500000, 1000000], patientRange: [200, 600], staffRange: [4, 8], problemRange: [2, 3], sqftRange: [2000, 4000], repRange: [2.0, 4.2], revenuePerPatient: 180 },
   hell:         { priceRange: [700000, 1200000], patientRange: [300, 800], staffRange: [5, 10], problemRange: [3, 4], sqftRange: [3000, 5000], repRange: [1.5, 3.5], revenuePerPatient: 160 },
