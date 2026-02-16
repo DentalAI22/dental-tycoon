@@ -4883,16 +4883,25 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
   }, [isGameOver, isSeasonComplete]);
 
   // ═══════════════════════════════════════════════════════
-  // COMPREHENSIVE END-OF-GAME SCORECARD
-  // This is the payoff screen — the most important view in the game
+  // END-OF-GAME SCREEN — MUST RENDER WHEN SEASON ENDS
   // ═══════════════════════════════════════════════════════
   const isDsoSold = gameState.endReason && gameState.endReason.includes('Sold to DSO');
-  const isEndScreen = (isSeasonComplete && !isGameOver) || isGameOver;
+  const isEndScreen = isSeasonComplete || isGameOver;
+
+  // DEBUG: Log every render cycle so we can trace the issue
+  if (gameState.day > 1) {
+    console.log('[DT] render:', { day: gameState.day, gameDuration: gameState.gameDuration || diff.gameDuration, cash: gameState.cash, overdraft: diff.overdraftLimit, isSeasonComplete, isGameOver, isEndScreen, speed: gameState.speed });
+  }
 
   if (isEndScreen) {
-    console.log('[DENTAL TYCOON] Rendering end screen', { isGameOver, isSeasonComplete, isDsoSold, scoreAvailable: !!score, day: gameState.day });
+    console.log('[DT] *** END SCREEN RENDERING ***', { isGameOver, isSeasonComplete, isDsoSold, scoreAvailable: !!score, day: gameState.day });
+
+    // SAFETY: wrap in try-catch so a calculation error doesn't blank the screen
+    try {
+
     const isBankrupt = isGameOver;
-    const feedback = generateSeasonFeedback(gameState, stats, diff);
+    let feedback = [];
+    try { feedback = generateSeasonFeedback(gameState, stats, diff); } catch (e) { console.error('[DT] feedback error:', e); }
     const modeBoard = score ? getLeaderboardByMode(diff.name) : [];
     const rank = score ? modeBoard.findIndex(e => e.overallScore <= score.overall) : -1;
     const isNewHigh = score && (modeBoard.length === 0 || score.overall > (modeBoard[0]?.overallScore || 0));
@@ -5286,6 +5295,34 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         </div>
       </div>
     );
+
+    } catch (endScreenError) {
+      console.error('[DT] END SCREEN CRASH:', endScreenError);
+      return (
+        <div className="game-over" style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <h1 style={{ fontSize: '32px', color: '#ef4444', marginBottom: '16px' }}>
+            {isGameOver ? '💸 GAME OVER' : '🏁 SEASON COMPLETE'}
+          </h1>
+          <p style={{ color: '#94a3b8', marginBottom: '8px' }}>Day {gameState.day} | Cash: ${(gameState.cash || 0).toLocaleString()}</p>
+          <p style={{ color: '#94a3b8', marginBottom: '8px' }}>Patients: {gameState.patients || 0} | Reputation: {(gameState.reputation || 0).toFixed(1)}</p>
+          {score && <p style={{ color: '#22c55e', fontSize: '24px', fontWeight: 'bold', marginBottom: '16px' }}>Score: {score.overall}/1000 ({score.overallGrade})</p>}
+          <p style={{ color: '#ef4444', fontSize: '12px', marginBottom: '24px' }}>
+            Detailed scorecard encountered an error. Score data shown above.
+            <br />Check console for details: {endScreenError.message}
+          </p>
+          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button className="start-btn" onClick={() => setScreen('home')} style={{ borderColor: '#3b82f6' }}>
+              <span className="btn-icon">🏠</span>
+              <div><div className="btn-title">Home</div></div>
+            </button>
+            <button className="start-btn" onClick={() => { setGameState(prev => ({ ...prev, day: 0, cash: diff.startingCash || 50000 })); setScreen('game'); }} style={{ borderColor: '#22c55e' }}>
+              <span className="btn-icon">🔄</span>
+              <div><div className="btn-title">Play Again</div></div>
+            </button>
+          </div>
+        </div>
+      );
+    }
   }
 
   return (
@@ -5402,6 +5439,18 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
               {s.label}
             </button>
           ))}
+          {/* DEV SHORTCUT: Force end screen for testing */}
+          <button
+            className="speed-btn"
+            style={{ background: '#ef4444', color: '#fff', fontSize: '9px', padding: '2px 6px', marginLeft: '8px' }}
+            onClick={() => {
+              console.log('[DT] DEV: Forcing end screen by setting day = gameDuration');
+              setGameState(prev => ({ ...prev, day: prev.gameDuration || diff.gameDuration, speed: 0 }));
+            }}
+            title="DEV: Skip to end screen"
+          >
+            🏁 END
+          </button>
         </div>
       </div>
 
