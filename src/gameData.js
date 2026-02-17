@@ -26,7 +26,7 @@ export const DIFFICULTY_MODES = [
     startingReputation: 3.5,  // start with better reputation
     overdraftLimit: -150000,  // more runway before bankruptcy
     showHints: true,
-    interestRate: 0.05,       // lower interest on loan
+    interestRate: 0.06,       // standard practice loan rate
     staffDramaEnabled: true,  // ON — can't learn management without people problems
     equipBreakdownEnabled: false,
     insuranceAuditsEnabled: false,
@@ -50,7 +50,7 @@ export const DIFFICULTY_MODES = [
     startingReputation: 3.2,  // practice has some existing reputation
     overdraftLimit: -100000,
     showHints: true,
-    interestRate: 0.055,      // slightly better rate — existing practice is collateral
+    interestRate: 0.06,       // standard practice loan rate
     staffDramaEnabled: false,
     equipBreakdownEnabled: false,
     insuranceAuditsEnabled: false,
