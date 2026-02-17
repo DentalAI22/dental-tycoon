@@ -202,28 +202,11 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
           )}
         </div>
 
-        {/* ═══ CHALLENGE CODE INPUT ═══ */}
-        <div style={{ margin: '16px auto', maxWidth: '520px', display: 'flex', gap: '8px', alignItems: 'stretch' }}>
-          <input value={quickName} onChange={e => { setQuickName(e.target.value); localStorage.setItem('dental_tycoon_player_name', e.target.value); }} placeholder="Your Name"
-            style={{ flex: '0 0 120px', padding: '10px 12px', fontSize: '13px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', outline: 'none' }} />
-          <input value={quickCode} onChange={e => { setQuickCode(e.target.value.toUpperCase()); setCodeError(''); }} placeholder="Challenge Code"
-            style={{ flex: 1, padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', letterSpacing: '2px', borderRadius: '10px', border: '1px solid rgba(234,179,8,0.3)', background: 'rgba(15,23,42,0.8)', color: '#eab308', outline: 'none', textAlign: 'center', textTransform: 'uppercase' }}
-            maxLength={8} onKeyDown={e => e.key === 'Enter' && handleQuickJoin()} />
-          <button onClick={handleQuickJoin} style={{
-            flex: '0 0 auto', padding: '10px 16px', fontSize: '13px', fontWeight: 700, borderRadius: '10px',
-            background: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.4)', color: '#eab308', cursor: 'pointer',
-          }}>
-            Accept Challenge
-          </button>
-        </div>
-        {codeError && <div style={{ textAlign: 'center', fontSize: '12px', color: '#ef4444', marginTop: '-8px', marginBottom: '8px' }}>{codeError}</div>}
-
-        {/* ═══ PLAYER NAME ═══ */}
-        <div style={{ margin: '12px auto 4px', maxWidth: '520px' }}>
-          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '6px' }}>Your Name (saved to leaderboard)</div>
+        {/* ═══ PLAYER NAME (single input) ═══ */}
+        <div style={{ margin: '16px auto 4px', maxWidth: '520px' }}>
           <input value={quickName} onChange={e => { setQuickName(e.target.value); localStorage.setItem('dental_tycoon_player_name', e.target.value); }}
-            placeholder="Enter your name..."
-            style={{ width: '100%', padding: '10px 16px', fontSize: '15px', fontWeight: 600, borderRadius: '10px', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', outline: 'none', textAlign: 'center', boxSizing: 'border-box' }} />
+            placeholder="Enter your name for the leaderboard..."
+            style={{ width: '100%', padding: '10px 16px', fontSize: '14px', fontWeight: 600, borderRadius: '10px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', outline: 'none', textAlign: 'center', boxSizing: 'border-box' }} />
         </div>
 
         {/* ═══ PLAY BUTTONS ═══ */}
@@ -248,11 +231,21 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
         <div style={{ margin: '16px auto', maxWidth: '520px' }}>
           <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '8px' }}>Competitive Modes</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-            <button onClick={() => onChallenge()} style={{ padding: '12px 8px', background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏆</div>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: '#eab308' }}>1v1 Challenge</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Same season, head-to-head</div>
-            </button>
+            <div style={{ background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '10px', textAlign: 'center', overflow: 'hidden' }}>
+              <button onClick={() => onChallenge()} style={{ width: '100%', padding: '12px 8px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'center' }}>
+                <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏆</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#eab308' }}>1v1 Challenge</div>
+                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Create or join</div>
+              </button>
+              <div style={{ padding: '0 6px 8px', display: 'flex', gap: '4px' }}>
+                <input value={quickCode} onChange={e => { setQuickCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                  placeholder="CODE" maxLength={8}
+                  onKeyDown={e => e.key === 'Enter' && handleQuickJoin()}
+                  style={{ flex: 1, padding: '5px 4px', fontSize: '11px', fontFamily: 'monospace', letterSpacing: '1px', borderRadius: '6px', border: '1px solid rgba(234,179,8,0.25)', background: 'rgba(15,23,42,0.6)', color: '#eab308', outline: 'none', textAlign: 'center', textTransform: 'uppercase', minWidth: 0 }} />
+                <button onClick={handleQuickJoin} style={{ padding: '5px 8px', fontSize: '10px', fontWeight: 700, borderRadius: '6px', background: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.3)', color: '#eab308', cursor: 'pointer', whiteSpace: 'nowrap' }}>Join</button>
+              </div>
+              {codeError && <div style={{ fontSize: '10px', color: '#ef4444', padding: '0 6px 6px' }}>{codeError}</div>}
+            </div>
             <button onClick={() => onGroupChallenge()} style={{ padding: '12px 8px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>👥</div>
               <div style={{ fontSize: '12px', fontWeight: 700, color: '#60a5fa' }}>Group Challenge</div>
