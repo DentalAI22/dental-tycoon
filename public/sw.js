@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dental-tycoon-v20';
+const CACHE_NAME = 'dental-tycoon-v21';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',

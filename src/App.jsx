@@ -234,7 +234,7 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
               <button onClick={() => onChallenge()} style={{ width: '100%', padding: '12px 8px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'center' }}>
                 <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏆</div>
                 <div style={{ fontSize: '12px', fontWeight: 700, color: '#eab308' }}>1v1 Challenge</div>
-                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Create or join</div>
+                <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Same scenario, head to head</div>
               </button>
               <div style={{ padding: '0 6px 8px', display: 'flex', gap: '4px' }}>
                 <input value={quickCode} onChange={e => { setQuickCode(e.target.value.toUpperCase()); setCodeError(''); }}
@@ -248,12 +248,12 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
             <button onClick={() => onGroupChallenge()} style={{ padding: '12px 8px', background: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>👥</div>
               <div style={{ fontSize: '12px', fontWeight: 700, color: '#60a5fa' }}>Group Challenge</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>5-50 players compete</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Same scenario, best score wins</div>
             </button>
             <button onClick={() => onTournament()} style={{ padding: '12px 8px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '10px', cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏅</div>
               <div style={{ fontSize: '12px', fontWeight: 700, color: '#ef4444' }}>Tournament</div>
-              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Bracket elimination</div>
+              <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px' }}>Bracket, new scenario each round</div>
             </button>
           </div>
         </div>
@@ -675,11 +675,14 @@ function ChallengeSetupScreen({ onStartChallenge, onJoinChallenge, onBack }) {
   return (
     <div className="acquire-screen">
       <h2 className="acquire-title">{mode === 'create' ? 'Start a Challenge' : 'Join a Challenge'}</h2>
-      <p className="acquire-sub" style={{ marginBottom: '15px' }}>
+      <p className="acquire-sub" style={{ marginBottom: '10px' }}>
         {mode === 'create'
           ? 'Share the generated code with anyone — friends, coworkers, your study group. Everyone plays the same season.'
           : 'Enter the challenge code to play the same season as the group.'}
       </p>
+      <div style={{ maxWidth: '500px', margin: '0 auto 14px', padding: '8px 12px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: '8px', fontSize: '11px', color: '#93c5fd', textAlign: 'center', lineHeight: 1.5 }}>
+        ⚖️ <b>Fair competition</b> — both players get the <b>exact same scenario</b>: same patients, same random events, same market conditions. The only difference is how YOU manage the practice. Best score wins.
+      </div>
 
       {/* Player name */}
       <div style={{ marginBottom: '15px' }}>
@@ -775,6 +778,9 @@ function ChallengeCompareScreen({ challengeCode, myResult, onBack }) {
         <div style={{ fontSize: '12px', color: '#64748b' }}>
           {allResults.length} player{allResults.length !== 1 ? 's' : ''} competing
           {myRank > 0 && <span> · You are <strong style={{ color: myRank <= 3 ? '#eab308' : '#e2e8f0' }}>#{myRank}</strong></span>}
+        </div>
+        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px' }}>
+          All players received the exact same scenario — same patients, events, and conditions. Scores reflect pure management skill.
         </div>
       </div>
 
@@ -1030,7 +1036,8 @@ function GroupChallengeSetupScreen({ onStartChallenge, onViewResults, onBack }) 
         <h2 className="acquire-title">Group Challenge Created!</h2>
         <div style={{ textAlign: 'center', margin: '20px auto', maxWidth: '400px' }}>
           <div style={{ fontSize: '48px', fontFamily: 'monospace', fontWeight: 'bold', color: '#eab308', letterSpacing: '8px', marginBottom: '12px' }}>{createdCode}</div>
-          <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px' }}>Share this code with your group. Everyone plays the same scenario.</p>
+          <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '8px' }}>Share this code with your group. Everyone gets the <b style={{ color: '#e2e8f0' }}>exact same scenario</b>.</p>
+          <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '16px' }}>Same patients, same events, same market conditions. The only difference is each player's decisions. Play at your own pace — compare results when everyone's done. Perfect for class competitions, CE events, or just bragging rights.</p>
           <InviteButtons code={createdCode} type="group challenge" color="#eab308" />
           <button onClick={handleStartPlaying} style={{ padding: '14px 32px', background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', width: '100%', marginBottom: '8px' }}>
             Start Playing
@@ -1047,7 +1054,11 @@ function GroupChallengeSetupScreen({ onStartChallenge, onViewResults, onBack }) 
   return (
     <div className="acquire-screen">
       <h2 className="acquire-title">Group Challenge</h2>
-      <p className="acquire-sub" style={{ fontSize: '14px' }}>Think you run a better practice than your classmates? Prove it. Same patients, same events, same market. Only one comes out on top.</p>
+      <p className="acquire-sub" style={{ fontSize: '14px' }}>Think you run a better practice than your classmates? Prove it.</p>
+      <div style={{ maxWidth: '520px', margin: '0 auto 14px', padding: '10px 14px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: '8px', fontSize: '11px', color: '#93c5fd', lineHeight: 1.6, textAlign: 'center' }}>
+        ⚖️ <b>How it works:</b> Every player gets the <b>exact same scenario</b> — same patients, same random events, same market conditions, same starting position. The only variable is YOUR decisions. Highest score wins.<br/>
+        <span style={{ color: '#64748b' }}>Perfect for dental school classes, study groups, CE events, or office competitions. Share the code and compare results!</span>
+      </div>
 
       {!mode && (
         <div className="practice-list" style={{ maxWidth: '500px', margin: '0 auto' }}>
@@ -1169,9 +1180,12 @@ function GroupChallengeResultsScreen({ code, onBack, onPlayAgain }) {
   return (
     <div className="acquire-screen" style={{ maxWidth: '600px', margin: '0 auto' }}>
       <h2 className="acquire-title">{group?.name || 'Group Challenge'} Results</h2>
-      <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+      <div style={{ textAlign: 'center', marginBottom: '12px' }}>
         <span style={{ fontFamily: 'monospace', color: '#eab308', fontSize: '18px', letterSpacing: '4px' }}>{code}</span>
         <span style={{ color: '#64748b', fontSize: '12px', marginLeft: '8px' }}>{results.length} player{results.length !== 1 ? 's' : ''}</span>
+        <div style={{ fontSize: '10px', color: '#475569', marginTop: '4px' }}>
+          All players received identical conditions — rankings reflect pure management decisions.
+        </div>
       </div>
 
       {/* Stats Banner */}
@@ -1291,7 +1305,10 @@ function TournamentSetupScreen({ onViewBracket, onBack }) {
           <div style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '8px' }}>{t?.name}</div>
           <div style={{ fontSize: '48px', fontFamily: 'monospace', fontWeight: 'bold', color: '#ef4444', letterSpacing: '8px', marginBottom: '12px' }}>{createdCode}</div>
           <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '4px' }}>Share this code with players. Max {t?.maxPlayers || 8} players.</p>
-          <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '16px' }}>{t?.players?.length || 1} player(s) joined</p>
+          <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '8px' }}>{t?.players?.length || 1} player(s) joined</p>
+          <div style={{ padding: '8px 12px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.12)', borderRadius: '8px', fontSize: '11px', color: '#fca5a5', marginBottom: '16px', lineHeight: 1.5 }}>
+            Each round gives all matchups a <b>new scenario</b>. Both players in a matchup get identical conditions — best score advances. Set up for your event, share the code, and reveal the champion live!
+          </div>
           <InviteButtons code={createdCode} type="tournament" color="#ef4444" />
           <button onClick={() => onViewBracket(createdCode, hostName.trim())} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
             View Bracket / Start
@@ -1305,7 +1322,11 @@ function TournamentSetupScreen({ onViewBracket, onBack }) {
   return (
     <div className="acquire-screen">
       <h2 className="acquire-title">Bracket Tournament</h2>
-      <p className="acquire-sub" style={{ fontSize: '14px' }}>Single elimination. No second chances. Create a bracket, invite your rivals, only one survives.</p>
+      <p className="acquire-sub" style={{ fontSize: '14px' }}>Single elimination. No second chances. Only one survives.</p>
+      <div style={{ maxWidth: '520px', margin: '0 auto 14px', padding: '10px 14px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '8px', fontSize: '11px', color: '#fca5a5', lineHeight: 1.6, textAlign: 'center' }}>
+        ⚖️ <b>How brackets work:</b> Each matchup gives both players the <b>exact same scenario</b>. Same patients, same events, same market — your decisions are the only difference. Higher score advances. <b>Each round gets a NEW scenario</b>, so you can't memorize your way to victory.<br/>
+        <span style={{ color: '#64748b' }}>Great for events — set up a tournament, share the code, and reveal the champion at your next class, meeting, or CE event!</span>
+      </div>
 
       {!mode && (
         <div className="practice-list" style={{ maxWidth: '500px', margin: '0 auto' }}>
@@ -1451,6 +1472,9 @@ function TournamentBracketScreen({ code, playerName, onPlayMatch, onBack }) {
   return (
     <div className="acquire-screen" style={{ maxWidth: '100%', overflow: 'auto' }}>
       <h2 className="acquire-title" style={{ fontSize: '18px' }}>{tournament.name}</h2>
+      <div style={{ maxWidth: '600px', margin: '0 auto 12px', padding: '6px 10px', background: 'rgba(59,130,246,0.04)', borderRadius: '6px', fontSize: '10px', color: '#64748b', textAlign: 'center' }}>
+        Each matchup = same scenario for both players. New scenario every round. Best practice manager advances.
+      </div>
       {tournament.champion && (
         <div style={{ textAlign: 'center', marginBottom: '16px', padding: '12px', background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '10px' }}>
           <div style={{ fontSize: '28px' }}>👑</div>
