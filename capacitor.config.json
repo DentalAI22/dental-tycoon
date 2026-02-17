@@ -1,0 +1,15 @@
+{
+  "appId": "com.dentaltycoon.app",
+  "appName": "Dental Tycoon",
+  "webDir": "dist",
+  "server": {
+    "url": "https://www.dentaltycoon.com",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#0a1628",
+    "preferredContentMode": "mobile",
+    "scheme": "Dental Tycoon"
+  }
+}
