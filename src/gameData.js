@@ -37,7 +37,7 @@ export const DIFFICULTY_MODES = [
   {
     id: 'acquire_small', name: 'Small Practice Purchase', icon: '🟢',
     subtitle: 'Retiring Dentist, Turnkey Operation',
-    description: 'Buy a small solo practice from a retiring dentist. $450K loan covers the purchase plus working capital. The practice comes with 300-500 active patients, 1-2 staff, and basic equipment. Valued at 75-82% of annual collections ($700/patient). Lower risk than scratch but you inherit whatever the previous owner left behind.',
+    description: 'Buy a small solo practice from a retiring dentist. $450K loan covers the purchase plus working capital. The practice comes with 300-500 active patients, 1-2 staff, and basic equipment. Valued at 75-82% of annual collections. Lower risk than scratch but you inherit whatever the previous owner left behind.',
     startModes: ['acquire'], // Acquisition ONLY — this is buying an existing practice
     loanAmount: 450000,
     gameDuration: 90,
@@ -58,7 +58,7 @@ export const DIFFICULTY_MODES = [
     competitorEventsEnabled: false,
     // Acquisition-specific properties
     isAcquisition: true,
-    inheritedPatients: 400, // realistic for a $200-350K practice at $700/patient
+    inheritedPatients: 400, // realistic for a $200-350K practice
     inheritedStaffCount: 2,
     inheritedEquipmentAge: 'aging', // some equipment is outdated
     patientRetentionRisk: 0.15, // 15% of patients may leave when old dentist retires
@@ -72,7 +72,7 @@ export const DIFFICULTY_MODES = [
     startModes: ['scratch', 'acquire'],
     acquireName: 'Mid-Size Practice',
     acquireSubtitle: 'Established But Needs Work',
-    acquireDescription: 'Acquire a mid-size practice — 3-4 operatories, 600-1000+ active patients, staff already in place. Valued at 72-82% of annual collections (~$700/patient). The previous owner left problems behind: aging equipment, staff morale, insurance contracts. Revenue is there but so is overhead.',
+    acquireDescription: 'Acquire a mid-size practice — 3-4 operatories, 600-1000+ active patients, staff already in place. Valued at 72-82% of annual collections. The previous owner left problems behind: aging equipment, staff morale, insurance contracts. Revenue is there but so is overhead.',
     acquireFeatures: ['180-day season', '$900K loan', '600-1000+ patients', 'Staff & equipment issues', 'Insurance audits', 'Real management'],
     loanAmount: 900000,
     gameDuration: 180,        // 6-month season

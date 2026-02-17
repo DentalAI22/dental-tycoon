@@ -178,13 +178,12 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
                   <span style={{ fontWeight: 'bold', color: i === 0 ? '#eab308' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#64748b', textAlign: 'center' }}>
                     {i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                   </span>
-                  <span style={{ color: entry.isDummy ? '#64748b' : '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.playerName || 'Anonymous'}
                     {entry.isTournamentChampion && <span style={{ marginLeft: '4px', fontSize: '10px' }}>🏆</span>}
                     {entry.isYesterdayChamp && <span style={{ marginLeft: '4px', fontSize: '10px' }} title={`${entry.streak || 1} day streak!`}>🔥{entry.streak > 1 ? entry.streak : ''}</span>}
-                    {entry.isDummy && entry.taunt && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#475569', fontStyle: 'italic', fontWeight: 400 }}>{entry.taunt}</span>}
                   </span>
-                  <span style={{ color: entry.isDummy ? '#475569' : '#22c55e', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'right' }}>{entry.overallScore || 0}</span>
+                  <span style={{ color: '#22c55e', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'right' }}>{entry.overallScore || 0}</span>
                   <span style={{ color: '#64748b', textAlign: 'center', fontSize: '11px' }}>{entry.overallGrade || '?'}</span>
                   <span style={{ color: '#475569', fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.difficulty || 'Standard'}</span>
                   {entry.challengeCode ? (
@@ -1701,6 +1700,160 @@ function CoachBanner({ tip }) {
   );
 }
 
+// ── ASK THE COACH: Contextual coaching during gameplay ──
+function getGameplayCoachInsights(gameState, stats, diff) {
+  const insights = [];
+  const day = gameState.day;
+  const cash = gameState.cash;
+  const patients = gameState.patients;
+  const staff = gameState.staff || [];
+  const debt = gameState.debt || 0;
+  const rep = gameState.reputation || 3.0;
+  const clean = gameState.cleanliness || 50;
+  const profit = stats.dailyProfit || 0;
+  const revenue = stats.dailyRevenue || 0;
+  const costs = stats.totalDailyCosts || 0;
+  const monthlyBurn = costs * 30;
+  const monthlyRev = revenue * 30;
+  const cashRunway = costs > 0 ? Math.round(cash / (costs * 30)) : 99;
+  const margin = revenue > 0 ? ((revenue - costs) / revenue * 100) : 0;
+  const avgMorale = staff.length > 0 ? Math.round(staff.reduce((s, st) => s + (st.morale || 50), 0) / staff.length) : 50;
+  const insurance = gameState.acceptedInsurance || [];
+  const marketing = gameState.activeMarketing || [];
+  const hasHMO = insurance.some(id => ['united_hmo', 'dhmo', 'medicaid'].includes(id));
+  const hasPremier = insurance.includes('premier');
+
+  // FINANCIAL HEALTH
+  if (profit < 0 && cash > 0) {
+    insights.push({ icon: '💸', title: 'You\'re Losing Money Daily', text: `Daily P/L is -$${Math.abs(profit).toLocaleString()}. That\'s $${(Math.abs(profit) * 30).toLocaleString()}/mo in losses. At this rate you have ~${cashRunway} months of runway. In real dentistry, most startups lose money for 3-6 months. The question is: can you survive long enough for patient volume to catch up?`, priority: 'warning' });
+  } else if (profit > 0 && margin < 15) {
+    insights.push({ icon: '📊', title: 'Thin Margins', text: `You're profitable but your margin is only ${margin.toFixed(0)}%. Healthy practices target 30-40%. You\'re essentially working for free at this margin. Look for ways to increase revenue per patient or cut overhead.`, priority: 'warning' });
+  } else if (profit > 0 && margin >= 30) {
+    insights.push({ icon: '💎', title: 'Strong Margins!', text: `${margin.toFixed(0)}% profit margin — that\'s in the healthy range. Most successful practices operate between 30-40%. Keep overhead controlled and don't overhire. This is what banks want to see.`, priority: 'good' });
+  }
+
+  if (cash < 20000 && profit < 0) {
+    insights.push({ icon: '🚨', title: 'Cash Crisis', text: `You have $${cash.toLocaleString()} left and you\'re bleeding money. In the real world, this is when dentists start panicking. Options: cut staff, cut marketing (risky — fewer patients), renegotiate rent, or find a way to see more patients faster. Do NOT ignore this.`, priority: 'critical' });
+  }
+
+  // PATIENTS
+  if (patients < 20 && day > 14) {
+    insights.push({ icon: '👥', title: 'Low Patient Count', text: `Only ${patients} patients after ${day} days. New practices need aggressive marketing early. Are you running Google Ads? Do you have a website? In the real world, it takes 6-12 months to fill a schedule, but you need to be investing in marketing NOW.`, priority: 'warning' });
+  } else if (patients > 100 && staff.length < 4) {
+    insights.push({ icon: '🏃', title: 'Understaffed for Volume', text: `${patients} patients with only ${staff.length} staff? You\'re running too lean. Patient wait times go up, satisfaction drops, reviews suffer. Hire an assistant or hygienist. In the real world, a practice this busy with this few staff burns everyone out.`, priority: 'warning' });
+  }
+
+  // STAFF
+  if (avgMorale < 40) {
+    insights.push({ icon: '😤', title: 'Staff Morale is Low', text: `Average morale: ${avgMorale}%. Unhappy staff = bad patient experience = bad reviews = fewer patients. It\'s a vicious cycle. Team building, training, and just paying attention to your people goes a long way. The #1 reason dental staff quit? Feeling unappreciated.`, priority: 'warning' });
+  }
+  const lowMoraleStaff = staff.filter(s => s.morale < 30);
+  if (lowMoraleStaff.length > 0) {
+    insights.push({ icon: '🚪', title: 'Staff Flight Risk', text: `${lowMoraleStaff.map(s => s.name).join(', ')} — morale under 30%. They\'re about to quit. In the real world, replacing a dental assistant costs $5-10K (recruiting, training, lost productivity). Replacing a dentist? $50K+. Invest in retention.`, priority: 'critical' });
+  }
+
+  // REPUTATION
+  if (rep < 2.5) {
+    insights.push({ icon: '⭐', title: 'Reputation Tanking', text: `${rep.toFixed(1)} stars. In the real world, anything below 3.5 on Google means new patients scroll right past you. Focus on patient satisfaction: clean office, short wait times, friendly staff. Every 5-star review helps. Every 1-star hurts for years.`, priority: 'critical' });
+  } else if (rep >= 4.5) {
+    insights.push({ icon: '🌟', title: 'Excellent Reputation!', text: `${rep.toFixed(1)} stars — patients love you. This is your biggest competitive advantage. In the real world, a 4.5+ Google rating generates organic referrals. Protect this at all costs. One bad day can drop you.`, priority: 'good' });
+  }
+
+  // CLEANLINESS
+  if (clean < 40) {
+    insights.push({ icon: '🧹', title: 'Office is Dirty', text: `Cleanliness at ${Math.round(clean)}%. Patients notice immediately. A dirty dental office is the #1 turn-off — people don't come back and they tell others. In the real world, this also risks health inspections and malpractice claims.`, priority: 'critical' });
+  }
+
+  // MARKETING
+  if (marketing.length === 0 && day > 7) {
+    insights.push({ icon: '📢', title: 'No Marketing!', text: `You have ZERO marketing channels active. Nobody knows you exist. In 2024, the minimum for a new practice: Google Ads + a website. Organic growth alone takes 2+ years to fill a schedule. You don\'t have that kind of time.`, priority: 'critical' });
+  } else if (marketing.length === 1 && day > 30) {
+    insights.push({ icon: '📢', title: 'Diversify Marketing', text: `Only 1 marketing channel. If it underperforms, you have no backup. Smart practices run 2-3 channels: digital ads, social media, referral program. Don\'t put all your eggs in one basket.`, priority: 'info' });
+  }
+
+  // INSURANCE MIX
+  if (hasHMO && !hasHMO && insurance.length < 2) {
+    insights.push({ icon: '🏥', title: 'Insurance Strategy', text: `You\'re running HMO patients. That\'s a volume game — you need speed, efficiency, and more staff. Make sure your overhead is LEAN. HMO reimbursement is 40-50% of what PPO pays. You make it up on volume or you don\'t make it at all.`, priority: 'info' });
+  }
+  if (hasPremier) {
+    insights.push({ icon: '💎', title: 'Delta Premier — Watch Out', text: `You inherited Delta Dental Premier patients. Premier is GRANDFATHERED — only the previous owner had that fee schedule. Your reimbursement is ~25% lower than theirs was. These patients are profitable but not as profitable as they look on paper. This is a common trap in practice acquisitions.`, priority: 'warning' });
+  }
+
+  // DEBT
+  if (debt > 0) {
+    const monthlyPayment = Math.round(debt * 0.015);
+    const debtToRev = monthlyRev > 0 ? (debt / (monthlyRev * 12) * 100).toFixed(0) : 'N/A';
+    insights.push({ icon: '🏦', title: 'Debt Position', text: `Outstanding: $${debt.toLocaleString()}. Monthly payment: ~$${monthlyPayment.toLocaleString()}. Debt-to-annual-revenue: ${debtToRev}%. Banks watch this ratio — under 70% is healthy. Missing payments damages your credit and can trigger loan acceleration.`, priority: debt > monthlyRev * 12 ? 'warning' : 'info' });
+  }
+
+  // GENERAL STRATEGY BY PHASE
+  if (day <= 15) {
+    insights.push({ icon: '🚀', title: 'Early Days Strategy', text: `It\'s Week ${Math.ceil(day / 7)}. Right now your job is simple: get patients in the door and don\'t blow through cash. Every dollar matters. Focus on marketing, keep staff lean, and be patient. Volume takes time.`, priority: 'info' });
+  } else if (day > 60 && profit > 0) {
+    insights.push({ icon: '📈', title: 'Growth Phase', text: `You\'re past Day 60 and profitable. Now think about scaling: can you add a hygienist? More marketing? In the real world, this is when dentists start thinking about a second operatory, extending hours, or adding specialties. Grow smart, not fast.`, priority: 'info' });
+  }
+
+  // Sort: critical > warning > info > good
+  const priorityOrder = ['critical', 'warning', 'info', 'good'];
+  insights.sort((a, b) => priorityOrder.indexOf(a.priority) - priorityOrder.indexOf(b.priority));
+  return insights.slice(0, 5); // Top 5 most relevant
+}
+
+function CoachPanel({ insights, onClose, isFree }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ background: '#1a2332', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '16px', maxWidth: '500px', width: '100%', maxHeight: '80vh', overflow: 'auto', padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#e2e8f0' }}>🎓 Ask the Coach</div>
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Game paused — take your time reading</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#94a3b8', borderRadius: '8px', padding: '6px 12px', cursor: 'pointer', fontSize: '13px' }}>Resume ▶</button>
+        </div>
+
+        {insights.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>
+            <div style={{ fontSize: '32px', marginBottom: '8px' }}>👍</div>
+            <div style={{ fontSize: '14px' }}>Everything looks good right now! Keep it up.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {insights.map((insight, i) => {
+              const colors = {
+                critical: { bg: 'rgba(239,68,68,0.08)', border: 'rgba(239,68,68,0.3)', title: '#fca5a5', text: '#e2e8f0' },
+                warning: { bg: 'rgba(234,179,8,0.06)', border: 'rgba(234,179,8,0.25)', title: '#fde68a', text: '#e2e8f0' },
+                info: { bg: 'rgba(59,130,246,0.06)', border: 'rgba(59,130,246,0.2)', title: '#93c5fd', text: '#cbd5e1' },
+                good: { bg: 'rgba(34,197,94,0.06)', border: 'rgba(34,197,94,0.2)', title: '#86efac', text: '#cbd5e1' },
+              };
+              const c = colors[insight.priority] || colors.info;
+              return (
+                <div key={i} style={{ background: c.bg, border: `1px solid ${c.border}`, borderRadius: '10px', padding: '12px 14px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 'bold', color: c.title, marginBottom: '4px' }}>{insight.icon} {insight.title}</div>
+                  <div style={{ fontSize: '12px', color: c.text, lineHeight: 1.6 }}>{insight.text}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {!isFree && (
+          <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '10px', textAlign: 'center' }}>
+            <div style={{ fontSize: '11px', color: '#eab308', marginBottom: '4px' }}>Want deeper coaching?</div>
+            <div style={{ fontSize: '11px', color: '#94a3b8' }}>Advanced coaching with detailed strategy breakdowns coming soon.</div>
+          </div>
+        )}
+
+        <button onClick={onClose} style={{
+          width: '100%', marginTop: '16px', padding: '12px', background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+          border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: 'bold', cursor: 'pointer',
+        }}>
+          Got it — Resume Game ▶
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
   const diff = difficulty || {};
   const diffId = diff.id || 'intermediate';
@@ -1710,7 +1863,9 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
   const baseBuildoutCost = space.baseBuildoutCost || Math.round(space.sqft * 125); // lease deposit, permits, plumbing, electrical, HVAC, IT infrastructure
   const [builtRooms, setBuiltRooms] = useState([]);
   const [cashSpent, setCashSpent] = useState(0);
-  const [architectHired, setArchitectHired] = useState(null); // null | 'premium' | 'budget'
+  const [architectHired, setArchitectHired] = useState(null); // null | 'consult' | done tier name
+  const [architectStep, setArchitectStep] = useState(0); // 0=not started, 1=practice model, 2=priority, 3=building
+  const [architectAnswers, setArchitectAnswers] = useState({});
 
   const usedSqft = builtRooms.reduce((sum, id) => {
     const item = BUILDOUT_ITEMS.find(b => b.id === id);
@@ -1763,64 +1918,83 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
     });
   };
 
-  const hireArchitect = (tier) => {
-    // Clear any existing rooms first
+  const startArchitectConsult = () => {
+    setArchitectStep(1);
+    setArchitectAnswers({});
+  };
+
+  const finishArchitectConsult = (answers) => {
     setBuiltRooms([]);
     setCashSpent(0);
-    setArchitectHired(tier);
 
-    // Architect designs an optimized layout
-    const isPremium = tier === 'premium';
-    const surchargeRate = (isPremium ? 0.15 : 0.08) * architectSurchargeMultiplier;
+    const model = answers.model; // 'ffs' | 'volume' | 'mixed'
+    const priority = answers.priority; // 'patients' | 'premium' | 'balanced'
     const sqft = space.sqft;
-    const targetOps = Math.min(space.maxOps, isPremium ? Math.floor(sqft / 400) : Math.floor(sqft / 480)); // premium = tighter, more efficient layout
     const rooms = [];
     let totalCost = 0;
 
-    // Build operatories — premium uses premium_ops, budget uses basic
-    const opsType = isPremium ? 'premium_ops' : 'basic_ops';
+    // Determine ops count based on model and space
+    const opsPerSqft = model === 'volume' ? 450 : model === 'ffs' ? 550 : 480;
+    const targetOps = Math.min(space.maxOps, Math.max(1, Math.floor(sqft / opsPerSqft)));
+    const opsType = priority === 'premium' ? 'premium_ops' : 'basic_ops';
+
     for (let i = 0; i < targetOps; i++) {
       rooms.push(opsType);
       const item = BUILDOUT_ITEMS.find(b => b.id === opsType);
       totalCost += item.costPerSqft * item.sqftNeeded;
     }
 
-    // Essential rooms
-    const essentials = isPremium
-      ? ['premium_waiting', 'sterilization', 'xray_room', 'break_room']
-      : ['waiting_area', 'sterilization', 'xray_room'];
-
-    essentials.forEach(id => {
+    // Essential rooms — everyone needs these
+    const addRoom = (id) => {
       const item = BUILDOUT_ITEMS.find(b => b.id === id);
-      if (item) {
-        const usedSoFar = rooms.reduce((s, r) => { const bi = BUILDOUT_ITEMS.find(b => b.id === r); return s + (bi?.sqftNeeded || 0); }, 0);
-        if (item.sqftNeeded <= sqft - usedSoFar) {
-          rooms.push(id);
-          totalCost += item.costPerSqft * item.sqftNeeded;
-        }
+      if (!item) return false;
+      const usedSoFar = rooms.reduce((s, r) => { const bi = BUILDOUT_ITEMS.find(b => b.id === r); return s + (bi?.sqftNeeded || 0); }, 0);
+      if (item.sqftNeeded <= sqft - usedSoFar) {
+        rooms.push(id);
+        totalCost += item.costPerSqft * item.sqftNeeded;
+        return true;
       }
-    });
+      return false;
+    };
 
-    // Premium adds bonus rooms if space allows
-    if (isPremium) {
-      ['lab', 'private_office', 'consultation_room'].forEach(id => {
-        const item = BUILDOUT_ITEMS.find(b => b.id === id);
-        if (item) {
-          const usedSoFar = rooms.reduce((s, r) => { const bi = BUILDOUT_ITEMS.find(b => b.id === r); return s + (bi?.sqftNeeded || 0); }, 0);
-          if (item.sqftNeeded <= sqft - usedSoFar && !rooms.includes(id)) {
-            rooms.push(id);
-            totalCost += item.costPerSqft * item.sqftNeeded;
-          }
-        }
-      });
+    // Waiting area choice based on practice model
+    if (model === 'ffs' || priority === 'premium') {
+      addRoom('premium_waiting');
+    } else {
+      addRoom('waiting_area');
+    }
+    addRoom('sterilization');
+    addRoom('xray_room');
+
+    // Model-specific rooms
+    if (model === 'ffs') {
+      addRoom('consultation');  // Essential for fee-for-service — this is where you close big cases
+      addRoom('private_office');
+      if (priority === 'premium') addRoom('lab');
+    } else if (model === 'volume') {
+      addRoom('break_room'); // Staff need it when running high volume
+      // Volume practices skip consultation rooms — throughput over presentation
+    } else {
+      // Mixed — balanced approach
+      addRoom('consultation');
+      addRoom('break_room');
     }
 
-    // Apply architect surcharge
+    // If space and budget allow, add nice-to-haves
+    if (priority === 'premium') {
+      addRoom('lab');
+      addRoom('break_room');
+    }
+
+    // Architect surcharge — lower than before, free consult on beginner
+    const surchargeRate = diffId === 'beginner' || diffId === 'acquire_small' ? 0.03 : 0.06 * architectSurchargeMultiplier;
     const architectFee = Math.round(totalCost * surchargeRate);
     totalCost += architectFee;
 
     setBuiltRooms(rooms);
     setCashSpent(totalCost);
+    setArchitectHired(model);
+    setArchitectStep(0);
   };
 
   const coachTip = getCoachTip('buildout', {
@@ -1846,36 +2020,92 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
         </div>
       </div>
 
-      {/* ═══ HIRE AN ARCHITECT ═══ */}
-      {!architectHired && builtRooms.length === 0 && architectAvailable && (
-        <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '14px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px' }}>
-          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '6px', textAlign: 'center' }}>Hire an Architect?</div>
-          <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', marginBottom: '12px' }}>
-            An architect designs the most efficient layout for your space — maximizing operatories, patient flow, and usable sqft. Costs more upfront but teaches you: <b style={{ color: '#e2e8f0' }}>the #1 killer of profitability is wasted square footage.</b>
+      {/* ═══ ARCHITECT CONSULT ═══ */}
+      {!architectHired && builtRooms.length === 0 && architectAvailable && architectStep === 0 && (
+        <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '14px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px', textAlign: 'center' }}>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '6px' }}>📐 Free Architect Consultation</div>
+          <p style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px' }}>
+            Answer a few questions about the practice you want to build and the architect will design an optimized layout. Small surcharge ({diffId === 'beginner' || diffId === 'acquire_small' ? '3' : Math.round(6 * architectSurchargeMultiplier)}%) on buildout costs. This is how real dentists plan — thinking through the practice model BEFORE picking rooms.
           </p>
-          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-            <button onClick={() => hireArchitect('premium')} style={{
-              flex: 1, padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
-              background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', color: '#e2e8f0',
-            }}>
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>✨</div>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#eab308' }}>Premium Architect</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{Math.round(15 * architectSurchargeMultiplier)}% surcharge. Maximum efficiency — tight layout, premium finishes, every sqft earning revenue.</div>
-            </button>
-            <button onClick={() => hireArchitect('budget')} style={{
-              flex: 1, padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
-              background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.3)', color: '#e2e8f0',
-            }}>
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>📐</div>
-              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>Budget Architect</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{Math.round(8 * architectSurchargeMultiplier)}% surcharge. Clean, functional layout. Gets you operational without overspending.</div>
-            </button>
-          </div>
-          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
-            Or skip and build it yourself below (manual room selection)
+          <button onClick={startArchitectConsult} style={{
+            padding: '10px 24px', borderRadius: '10px', cursor: 'pointer',
+            background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.4)', color: '#60a5fa', fontSize: '14px', fontWeight: 'bold',
+          }}>
+            Start Consultation
+          </button>
+          <div style={{ marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+            Or scroll down to build it yourself (manual room selection)
           </div>
         </div>
       )}
+
+      {/* Architect Questionnaire - Step 1: Practice Model */}
+      {architectStep === 1 && (
+        <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '16px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '12px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '4px' }}>📐 Architect: "What kind of practice are you building?"</div>
+          <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '12px' }}>This is the most important decision — it determines your layout, staffing, and revenue model.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button onClick={() => { setArchitectAnswers(a => ({ ...a, model: 'ffs' })); setArchitectStep(2); }} style={{
+              padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.25)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#eab308' }}>Fee-for-Service / PPO</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>Higher revenue per patient. Fewer patients, bigger cases. Think Mercedes dealership — consultation rooms, premium finishes, treatment presentation matters. You close $40K full-mouth cases in a private consultation room.</div>
+            </button>
+            <button onClick={() => { setArchitectAnswers(a => ({ ...a, model: 'volume' })); setArchitectStep(2); }} style={{
+              padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.25)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#60a5fa' }}>Volume / HMO</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>Lower revenue per patient, way more patients. Efficiency is everything — maximize operatories, minimize wasted space. Skip the fancy consultation room. You make $1M one dollar at a time. Staff needs to move fast.</div>
+            </button>
+            <button onClick={() => { setArchitectAnswers(a => ({ ...a, model: 'mixed' })); setArchitectStep(2); }} style={{
+              padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.25)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>Mixed / I'm Not Sure Yet</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>A balanced layout that works for both PPO and some HMO patients. Consultation room + efficient ops. Most startup dentists start here and specialize later as they learn what works in their market.</div>
+            </button>
+          </div>
+          <button onClick={() => setArchitectStep(0)} style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>Cancel — I'll build it myself</button>
+        </div>
+      )}
+
+      {/* Architect Questionnaire - Step 2: Priority */}
+      {architectStep === 2 && (
+        <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '16px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '12px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '4px' }}>📐 Architect: "What's your priority?"</div>
+          <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '12px' }}>
+            You picked <b style={{ color: architectAnswers.model === 'ffs' ? '#eab308' : architectAnswers.model === 'volume' ? '#60a5fa' : '#22c55e' }}>
+            {architectAnswers.model === 'ffs' ? 'Fee-for-Service' : architectAnswers.model === 'volume' ? 'Volume/HMO' : 'Mixed'}</b>. Now — how should I allocate the space?
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button onClick={() => finishArchitectConsult({ ...architectAnswers, priority: 'patients' })} style={{
+              padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.25)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#60a5fa' }}>Maximize Patient Capacity</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>More operatories, basic finishes, efficient layout. See the most patients possible. Good for volume-based practices.</div>
+            </button>
+            <button onClick={() => finishArchitectConsult({ ...architectAnswers, priority: 'premium' })} style={{
+              padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.25)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#eab308' }}>Premium Patient Experience</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>Fewer ops but premium finishes, consultation room, in-house lab. Higher revenue per patient. Good for fee-for-service.</div>
+            </button>
+            <button onClick={() => finishArchitectConsult({ ...architectAnswers, priority: 'balanced' })} style={{
+              padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.25)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>Balanced</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px' }}>Smart middle ground — enough ops for growth, room for support spaces. The "safe" option for a first-time practice owner.</div>
+            </button>
+          </div>
+          <button onClick={() => setArchitectStep(1)} style={{ marginTop: '8px', fontSize: '11px', color: '#64748b', background: 'none', border: 'none', cursor: 'pointer' }}>← Back to practice model</button>
+        </div>
+      )}
+
       {!architectHired && builtRooms.length === 0 && !architectAvailable && (
         <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '10px 14px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>
           <b style={{ color: '#ef4444' }}>No Architect Available</b> — At this difficulty level, you design the layout yourself. Calculate your square footage needs, balance operatories vs. support rooms, and manage the budget manually. This is how the pros do it.
@@ -1883,9 +2113,9 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
       )}
       {architectHired && (
         <div style={{ maxWidth: '600px', margin: '0 auto 12px', padding: '8px 14px', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', fontSize: '12px', textAlign: 'center' }}>
-          <span style={{ color: '#22c55e', fontWeight: 'bold' }}>{architectHired === 'premium' ? '✨ Premium' : '📐 Budget'} Architect</span>
-          <span style={{ color: '#94a3b8' }}> designed your layout ({architectHired === 'premium' ? '15%' : '8%'} surcharge applied). </span>
-          <button onClick={() => { setArchitectHired(null); setBuiltRooms([]); setCashSpent(0); }} style={{ fontSize: '11px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+          <span style={{ color: '#22c55e', fontWeight: 'bold' }}>📐 Architect</span>
+          <span style={{ color: '#94a3b8' }}> designed your {architectHired === 'ffs' ? 'fee-for-service' : architectHired === 'volume' ? 'volume/HMO' : 'mixed'} layout ({diffId === 'beginner' || diffId === 'acquire_small' ? '3' : Math.round(6 * architectSurchargeMultiplier)}% surcharge). </span>
+          <button onClick={() => { setArchitectHired(null); setBuiltRooms([]); setCashSpent(0); setArchitectStep(0); }} style={{ fontSize: '11px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
             Start over (DIY)
           </button>
         </div>
@@ -2497,7 +2727,7 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <span>Collections: <b style={{ color: '#e2e8f0' }}>${(option.annualCollections / 1000).toFixed(0)}K/yr</b></span>
                 <span>Price/Collections: <b style={{ color: option.collectionPct > 0.80 ? '#ef4444' : option.collectionPct < 0.74 ? '#22c55e' : '#eab308' }}>{Math.round(option.collectionPct * 100)}%</b></span>
-                <span>$/Patient: <b style={{ color: '#e2e8f0' }}>${option.revenuePerPatient || 700}</b></span>
+                <span>Patients: <b style={{ color: '#e2e8f0' }}>{option.patients.toLocaleString()}</b></span>
               </div>
             </div>
             {/* Risk / Reward meter */}
@@ -2552,8 +2782,11 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
               </div>
             )}
             {option.insurances?.includes('premier') && (
-              <div style={{ marginTop: '6px', padding: '6px 8px', fontSize: '11px', color: '#ef4444', fontWeight: 600, background: 'rgba(239,68,68,0.1)', borderRadius: '6px', borderLeft: '3px solid #ef4444' }}>
-                RED FLAG: Heavy Delta Premier patients. As a new owner, your fee schedule drops ~25% on these patients. Same work, same overhead — 25% less revenue. Factor this into your valuation.
+              <div style={{ marginTop: '6px', padding: '6px 8px', fontSize: '11px', color: '#ef4444', background: 'rgba(239,68,68,0.1)', borderRadius: '6px', borderLeft: '3px solid #ef4444' }}>
+                <div style={{ fontWeight: 700, marginBottom: '3px' }}>🚩 COACH WARNING: Delta Dental Premier</div>
+                <div style={{ color: '#fca5a5', lineHeight: 1.5 }}>
+                  Delta Premier is <b>grandfathered</b> — only dentists who signed up years ago still have it. New dentists CANNOT credential for Premier anymore. Delta is converting everyone to the lower PPO fee schedule. If the selling dentist is 55+, they likely have Premier. When you take over, <b>your reimbursement drops ~25%</b> to regular Delta PPO rates. Same patients, same work — significantly less revenue. This is one of the biggest hidden traps in practice acquisitions.
+                </div>
               </div>
             )}
             <button className="buy-btn" style={{ width: '100%', marginTop: '12px', padding: '10px', fontSize: '14px', fontWeight: 700 }}
@@ -4802,6 +5035,8 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
   const [activePatients, setActivePatients] = useState([]);
   const [eventPopup, setEventPopup] = useState(null);
   const [pendingDecision, setPendingDecision] = useState(null);
+  const [showCoachPanel, setShowCoachPanel] = useState(false);
+  const speedBeforeCoach = useRef(0);
   const speedBeforeDecision = useRef(0);
 
   // Challenge mode: pre-generate deterministic event schedule so both players face identical events
@@ -5732,25 +5967,53 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
 
       const newRevHistory = [...prev.revenueHistory, s.dailyRevenue].slice(-90);
 
-      // ── BEGINNER COACHING TIPS ── (periodic guidance during gameplay)
+      // ── COACHING TIPS ── (frequent on beginner, periodic guidance during gameplay)
       if (diff.showHints) {
         const day = prev.day;
         const currentCash = prev.cash + cashDelta;
         const currentPatients = prev.patients + patientDelta;
+        const currentProfit = s.dailyProfit;
+        const avgMorale = updatedStaff.length > 0 ? updatedStaff.reduce((sum, st) => sum + (st.morale || 50), 0) / updatedStaff.length : 50;
+
+        // Milestone coaching
+        if (day === 3) {
+          newLog.push({ day, text: '💡 COACH: Tip — hit the 🎓 Coach button anytime to pause and get advice on what\'s happening. I\'ll analyze your practice and tell you what to focus on.', type: 'info' });
+        }
         if (day === 7) {
           newLog.push({ day, text: '💡 COACH: First week done! Check your daily revenue vs. daily costs. If costs > revenue, you\'re burning cash every single day. That\'s normal for Week 1, but it can\'t last forever.', type: 'info' });
         }
-        if (day === 14 && currentPatients < 15) {
-          newLog.push({ day, text: '💡 COACH: Patient count is low. In the real world, it takes 6-12 months to build a full schedule. Marketing is the gas pedal — are you running enough? Check your marketing channels.', type: 'info' });
+        if (day === 10) {
+          newLog.push({ day, text: '💡 COACH: Quick lesson — your revenue depends on 3 things: how many patients you see, what procedures they accept, and how much insurance reimburses. You control the first two through marketing and upselling.', type: 'info' });
         }
-        if (day === 21 && s.dailyProfit < 0) {
+        if (day === 14 && currentPatients < 15) {
+          newLog.push({ day, text: '💡 COACH: Patient count is low. In the real world, it takes 6-12 months to fill a schedule. Marketing is the gas pedal — are you running enough? Check your marketing channels.', type: 'info' });
+        }
+        if (day === 18 && currentProfit < 0) {
+          newLog.push({ day, text: '💡 COACH: Still losing money? That\'s normal early on. But here\'s the key number: divide your cash by your monthly losses. That\'s how many months you can survive. Under 3 months? Time to cut costs or boost marketing.', type: 'warning' });
+        }
+        if (day === 21 && currentProfit < 0) {
           newLog.push({ day, text: '💡 COACH: You\'re losing money daily. Every new practice does at first — overhead is fixed but patients take time. Key metric: how many months of cash runway do you have? Divide cash by monthly burn.', type: 'warning' });
         }
-        if (day === 30 && currentCash > 0) {
-          newLog.push({ day, text: '💡 COACH: One month in! Pro tip: Look at your Relationships tab. Your equipment tech, supply rep, and landlord relationships directly affect your costs. Invest in those relationships.', type: 'info' });
+        if (day === 25) {
+          newLog.push({ day, text: '💡 COACH: Pro tip — upselling isn\'t sleazy, it\'s necessary. When a patient needs a crown, presenting the treatment properly is the difference between a $200 visit and a $1,200 visit. Coaching and training help your team present treatment better.', type: 'info' });
         }
-        if (day === 45 && prev.staff.some(st => st.morale < 40)) {
+        if (day === 30 && currentCash > 0) {
+          newLog.push({ day, text: '💡 COACH: One month in! Check your Relationships tab. Your equipment tech, supply rep, and landlord relationships directly affect your costs. Invest in those relationships — small gestures save big money.', type: 'info' });
+        }
+        if (day === 35) {
+          newLog.push({ day, text: '💡 COACH: Think about your patient mix. PPO patients pay less but come consistently. Cash patients pay full price but are rarer. HMO pays the least but brings volume. The right mix depends on YOUR overhead and staff capacity.', type: 'info' });
+        }
+        if (day === 40 && currentProfit > 0) {
+          newLog.push({ day, text: '💡 COACH: You\'re profitable! Don\'t get comfortable — this is when smart dentists reinvest. Consider: additional marketing, staff training, or better equipment. The goal is compound growth.', type: 'info' });
+        }
+        if (day === 45 && avgMorale < 40) {
           newLog.push({ day, text: '💡 COACH: Staff morale is dropping. Unhappy staff = bad patient experience = bad reviews. Check the Training tab — team building boosts morale. In the real world, this is the #2 reason practices fail (after cash).', type: 'warning' });
+        }
+        if (day === 50) {
+          newLog.push({ day, text: '💡 COACH: Halfway check — are you tracking your overhead ratio? Take your total monthly costs and divide by monthly revenue. Under 60% overhead = healthy. Over 75% = you\'re in trouble. Most failed practices never watched this number.', type: 'info' });
+        }
+        if (day === 55 && updatedStaff.length >= 3) {
+          newLog.push({ day, text: '💡 COACH: With 3+ staff, management becomes its own job. In the real world, dentists spend 20-30% of their time managing people. Training your team pays for itself — skilled staff need less supervision and produce more revenue.', type: 'info' });
         }
         if (day === 60) {
           const overhead = s.totalDailyCosts * 30;
@@ -5758,8 +6021,22 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           const margin = revenue > 0 ? ((revenue - overhead) / revenue * 100).toFixed(0) : 0;
           newLog.push({ day, text: `💡 COACH: Month 2 check-in. Monthly overhead: ~$${overhead.toLocaleString()}. Monthly revenue: ~$${revenue.toLocaleString()}. Margin: ${margin}%. A healthy practice targets 30-40% profit margin. Anything below 15% means you\'re working for free.`, type: 'info' });
         }
+        if (day === 70) {
+          newLog.push({ day, text: '💡 COACH: Real talk — in dentistry, the practice that collects the most per patient wins. It\'s not about seeing 50 patients a day. It\'s about presenting the right treatment and having patients say yes. That comes from trust, which comes from reputation and staff quality.', type: 'info' });
+        }
         if (day === 75 && (prev.activeMarketing || []).length < 2) {
           newLog.push({ day, text: '💡 COACH: Only 1 marketing channel? Diversify. If Google Ads is your only source and costs spike, you have no backup. In the real world, the best practices have 3-4 patient acquisition channels.', type: 'info' });
+        }
+        if (day === 80) {
+          newLog.push({ day, text: '💡 COACH: Final stretch! By now your practice should have a rhythm. If you\'re profitable with growing patients and happy staff — you\'re doing what 70% of real dental startups fail to do. Keep pushing.', type: 'info' });
+        }
+
+        // Reactive coaching (triggers based on state, not just day)
+        if (day % 15 === 0 && currentCash < 10000 && currentProfit < 0) {
+          newLog.push({ day, text: '🚨 COACH: CASH IS CRITICALLY LOW. You need to act NOW. Options: fire underperforming staff, pause expensive marketing, or increase patient volume fast. In the real world, this is when practices call their accountant in a panic.', type: 'negative' });
+        }
+        if (day % 20 === 0 && prev.reputation < 2.5) {
+          newLog.push({ day, text: '💡 COACH: Your reputation is suffering. Bad reviews compound — one bad review needs 10 good ones to offset it. Focus on cleanliness, wait times, and staff attitude. These are the 3 things patients notice most.', type: 'warning' });
         }
       }
 
@@ -6412,6 +6689,18 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       {/* Key Decision Popup */}
       {pendingDecision && <KeyDecisionPopup decision={pendingDecision} onChoose={handleDecision} />}
 
+      {/* Ask the Coach Panel */}
+      {showCoachPanel && (
+        <CoachPanel
+          insights={getGameplayCoachInsights(gameState, stats, diff)}
+          isFree={diff.showHints}
+          onClose={() => {
+            setShowCoachPanel(false);
+            setGameState(prev => ({ ...prev, speed: speedBeforeCoach.current || 1 }));
+          }}
+        />
+      )}
+
       {/* Location Selector Bar — only when multi-office active and locations exist */}
       {diff.multiOffice && (gameState.locations || []).length > 0 && (
         <div style={{
@@ -6515,6 +6804,19 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
               {s.label}
             </button>
           ))}
+          {/* ASK THE COACH button */}
+          <button
+            className="speed-btn"
+            style={{ background: diff.showHints ? 'rgba(59,130,246,0.3)' : 'rgba(234,179,8,0.2)', color: diff.showHints ? '#60a5fa' : '#eab308', fontSize: '9px', padding: '2px 8px', marginLeft: '4px', border: `1px solid ${diff.showHints ? 'rgba(59,130,246,0.4)' : 'rgba(234,179,8,0.3)'}` }}
+            onClick={() => {
+              speedBeforeCoach.current = gameState.speed;
+              setGameState(prev => ({ ...prev, speed: 0 }));
+              setShowCoachPanel(true);
+            }}
+            title="Pause & ask the coach"
+          >
+            🎓 Coach
+          </button>
           {/* DEV SHORTCUT: Force end screen for testing */}
           <button
             className="speed-btn"
