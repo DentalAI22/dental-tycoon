@@ -37,9 +37,9 @@ export const DIFFICULTY_MODES = [
   {
     id: 'acquire_small', name: 'Small Practice Purchase', icon: '🟢',
     subtitle: 'Retiring Dentist, Turnkey Operation',
-    description: 'Buy a small solo practice from a retiring dentist. $300K purchase price — the practice comes with 40 existing patients, 2 staff members, basic equipment (some outdated), and an existing lease. Lower risk than starting from scratch, but you inherit whatever the previous owner left behind: aging X-ray machine, a hygienist who may not like the new boss, and patients who might leave when their old dentist retires.',
+    description: 'Buy a small solo practice from a retiring dentist. $450K loan covers the purchase plus working capital. The practice comes with 300-500 active patients, 1-2 staff, and basic equipment. Valued at 75-82% of annual collections ($700/patient). Lower risk than scratch but you inherit whatever the previous owner left behind.',
     startModes: ['acquire'], // Acquisition ONLY — this is buying an existing practice
-    loanAmount: 300000,
+    loanAmount: 450000,
     gameDuration: 90,
     rentMultiplier: 0.9,      // inherited lease is slightly favorable
     salaryMultiplier: 1.0,
@@ -58,12 +58,12 @@ export const DIFFICULTY_MODES = [
     competitorEventsEnabled: false,
     // Acquisition-specific properties
     isAcquisition: true,
-    inheritedPatients: 40,
+    inheritedPatients: 400, // realistic for a $200-350K practice at $700/patient
     inheritedStaffCount: 2,
     inheritedEquipmentAge: 'aging', // some equipment is outdated
     patientRetentionRisk: 0.15, // 15% of patients may leave when old dentist retires
     goodwillValue: 80000,     // what you're paying for beyond tangible assets
-    features: ['90-day season', '$300K purchase', '40 inherited patients', '2 existing staff', 'Aging equipment', 'Lower risk, lower upside'],
+    features: ['90-day season', '$450K loan', '300-500 patients', '1-2 staff', 'Priced at 75-82% collections', 'Lower risk, lower upside'],
   },
   {
     id: 'intermediate', name: 'Growing Practice', icon: '🟡',
@@ -72,9 +72,9 @@ export const DIFFICULTY_MODES = [
     startModes: ['scratch', 'acquire'],
     acquireName: 'Mid-Size Practice',
     acquireSubtitle: 'Established But Needs Work',
-    acquireDescription: 'Acquire a mid-size practice — 3-4 operatories, existing patient base, staff already in place. The previous owner left some problems behind: aging equipment, staff morale issues, insurance contracts that need renegotiating. Revenue is there but so is the overhead. You need to stabilize and grow without bleeding cash.',
-    acquireFeatures: ['180-day season', '$750K acquisition', 'Inherited staff & patients', 'Equipment issues', 'Insurance audits', 'Real management'],
-    loanAmount: 750000,
+    acquireDescription: 'Acquire a mid-size practice — 3-4 operatories, 600-1000+ active patients, staff already in place. Valued at 72-82% of annual collections (~$700/patient). The previous owner left problems behind: aging equipment, staff morale, insurance contracts. Revenue is there but so is overhead.',
+    acquireFeatures: ['180-day season', '$900K loan', '600-1000+ patients', 'Staff & equipment issues', 'Insurance audits', 'Real management'],
+    loanAmount: 900000,
     gameDuration: 180,        // 6-month season
     rentMultiplier: 1.0,
     salaryMultiplier: 1.0,
@@ -100,9 +100,9 @@ export const DIFFICULTY_MODES = [
     startModes: ['scratch', 'acquire'],
     acquireName: 'Large Group Practice',
     acquireSubtitle: 'Big Investment, Big Overhead, Big Upside',
-    acquireDescription: 'Buy a large multi-doctor group practice — $1.2M deal. Multiple associates, specialists, big staff roster, high-volume patient flow. Revenue potential is massive but so are the bills. Payroll alone could sink you. Competitors are circling to poach your best people. One bad quarter and the cash spiral starts. The reward? If you get it right, you\'re running a dental empire.',
-    acquireFeatures: ['365-day season', '$1.2M acquisition', 'Multiple doctors', 'Big staff & overhead', 'Competitors', 'Empire potential'],
-    loanAmount: 1200000,
+    acquireDescription: 'Buy a large multi-doctor group practice — $1.5M loan. Practices at this level have 800-1500+ patients and collect $600K-$1.2M/year. Valued at 70-80% of collections. Multiple associates, big staff, high overhead. One bad quarter and the cash spiral starts.',
+    acquireFeatures: ['365-day season', '$1.5M loan', '800-1500+ patients', 'Big staff & overhead', 'Competitors', 'Empire potential'],
+    loanAmount: 1500000,
     gameDuration: 365,        // full year
     rentMultiplier: 1.0,
     salaryMultiplier: 1.0,
@@ -2286,12 +2286,20 @@ const PROBLEM_POOL = [
   { id: 'embezzlement_aftermath', label: 'Embezzlement History', severity: 'danger', description: 'Cash went missing under previous ownership. Staff trust is shattered, financial records unreliable.' },
 ];
 
+// Real dental practice valuation:
+// - Revenue per active patient: ~$700/year (industry benchmark)
+// - Practice sells for 70-85% of annual collections
+//   70% = HMO-heavy, rundown, problems | 85% = quality, newer, sudden sale
+// - Patients = price / (collection_pct * $700)
+// Patient count is now DERIVED from price, not independent.
+const REVENUE_PER_PATIENT = 700; // industry standard ~$700/patient/year
+
 const ACQUISITION_SCALING = {
-  beginner:     { priceRange: [150000, 300000], patientRange: [40, 100], staffRange: [1, 2], problemRange: [0, 1], sqftRange: [800, 1200], repRange: [2.8, 3.5], revenuePerPatient: 280 },
-  acquire_small: { priceRange: [150000, 300000], patientRange: [30, 80], staffRange: [1, 2], problemRange: [0, 1], sqftRange: [700, 1100], repRange: [2.8, 3.5], revenuePerPatient: 280 },
-  intermediate: { priceRange: [250000, 600000], patientRange: [80, 300], staffRange: [2, 4], problemRange: [1, 2], sqftRange: [1200, 2500], repRange: [2.5, 4.0], revenuePerPatient: 220 },
-  expert:       { priceRange: [500000, 1000000], patientRange: [200, 600], staffRange: [4, 8], problemRange: [2, 3], sqftRange: [2000, 4000], repRange: [2.0, 4.2], revenuePerPatient: 180 },
-  hell:         { priceRange: [700000, 1200000], patientRange: [300, 800], staffRange: [5, 10], problemRange: [3, 4], sqftRange: [3000, 5000], repRange: [1.5, 3.5], revenuePerPatient: 160 },
+  beginner:     { priceRange: [200000, 350000], collectionPctRange: [0.78, 0.85], staffRange: [1, 3], problemRange: [0, 1], sqftRange: [800, 1200], repRange: [3.0, 3.8] },
+  acquire_small: { priceRange: [200000, 350000], collectionPctRange: [0.75, 0.82], staffRange: [1, 2], problemRange: [0, 1], sqftRange: [700, 1100], repRange: [2.8, 3.5] },
+  intermediate: { priceRange: [400000, 750000], collectionPctRange: [0.72, 0.82], staffRange: [3, 5], problemRange: [1, 2], sqftRange: [1200, 2500], repRange: [2.5, 4.0] },
+  expert:       { priceRange: [600000, 1200000], collectionPctRange: [0.70, 0.80], staffRange: [5, 8], problemRange: [2, 3], sqftRange: [2000, 4000], repRange: [2.0, 4.2] },
+  hell:         { priceRange: [800000, 1500000], collectionPctRange: [0.68, 0.78], staffRange: [6, 10], problemRange: [3, 4], sqftRange: [3000, 5000], repRange: [1.5, 3.5] },
 };
 
 function randInt(min, max) { return Math.floor(_globalRng() * (max - min + 1)) + min; }
@@ -2471,11 +2479,19 @@ export function generateAcquisitionOptions(difficulty) {
     const name = generatePracticeName();
     const problemCount = randInt(scaling.problemRange[0], scaling.problemRange[1]);
     const problems = shuffle(PROBLEM_POOL).slice(0, problemCount).map(p => p.id);
-    const patients = randInt(scaling.patientRange[0], scaling.patientRange[1]);
     const sqft = randInt(scaling.sqftRange[0], scaling.sqftRange[1]);
     const reputation = randFloat(scaling.repRange[0], scaling.repRange[1]);
     const price = randInt(scaling.priceRange[0], scaling.priceRange[1]);
     const staffCount = randInt(scaling.staffRange[0], scaling.staffRange[1]);
+
+    // VALUATION FORMULA: Price = collection_pct × annual_collections
+    // Annual collections = patients × $700/patient/year
+    // So: patients = price / (collection_pct × $700)
+    // Problems push collection_pct toward the low end (70%), quality pushes toward high end (85%)
+    const collectionPct = randFloat(scaling.collectionPctRange[0], scaling.collectionPctRange[1], 2);
+    const annualCollections = Math.round(price / collectionPct);
+    const patients = Math.round(annualCollections / REVENUE_PER_PATIENT);
+
     // Patient attrition: reduce stated patient count by 25-35% (they'll leave during transition)
     const attritionHit = problems.includes('patient_attrition') ? Math.round(patients * randFloat(0.25, 0.35)) : 0;
     // Bad lease: inflate rent
@@ -2484,7 +2500,7 @@ export function generateAcquisitionOptions(difficulty) {
     const overheadMult = problems.includes('high_overhead') ? 1.3 : 1.0;
     const rent = Math.round(baseRent * overheadMult * leaseInflation);
     const effectivePatients = patients - attritionHit; // actual patients after transition loss
-    const monthlyRevenue = Math.round(effectivePatients * scaling.revenuePerPatient / 12);
+    const monthlyRevenue = Math.round(annualCollections / 12);
     // No systems: reduce revenue further (poor collections)
     const collectionLoss = problems.includes('no_systems') ? 0.80 : 1.0; // only collecting 80%
     const cleanliness = problems.includes('dirty_office') ? randInt(15, 30) : randInt(40, 75);
@@ -2502,6 +2518,9 @@ export function generateAcquisitionOptions(difficulty) {
       story: buildStory(name, problems, effectivePatients, reputation),
       positives,
       price,
+      annualCollections,
+      collectionPct,
+      revenuePerPatient: REVENUE_PER_PATIENT,
       patients: effectivePatients, // post-attrition count (what you're actually getting)
       statedPatients: patients, // what the seller claimed
       attritionHit,

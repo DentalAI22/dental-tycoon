@@ -2337,9 +2337,18 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
                 ))}
               </div>
             )}
+            {/* Valuation metrics */}
+            <div style={{ margin: '8px 0', padding: '8px', background: 'rgba(59,130,246,0.06)', borderRadius: '8px', fontSize: '11px', color: '#94a3b8' }}>
+              <div style={{ fontWeight: 700, color: '#60a5fa', marginBottom: '4px', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px' }}>Valuation</div>
+              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                <span>Collections: <b style={{ color: '#e2e8f0' }}>${(option.annualCollections / 1000).toFixed(0)}K/yr</b></span>
+                <span>Price/Collections: <b style={{ color: option.collectionPct > 0.80 ? '#ef4444' : option.collectionPct < 0.74 ? '#22c55e' : '#eab308' }}>{Math.round(option.collectionPct * 100)}%</b></span>
+                <span>$/Patient: <b style={{ color: '#e2e8f0' }}>${option.revenuePerPatient || 700}</b></span>
+              </div>
+            </div>
             <div className="practice-stats">
               <div className="pstat"><span className="pstat-label">Price</span><span className="pstat-val">${(option.price / 1000).toFixed(0)}K</span></div>
-              <div className="pstat"><span className="pstat-label">Patients</span><span className="pstat-val">{option.patients}{option.attritionHit > 0 ? ` (was ${option.statedPatients})` : ''}</span></div>
+              <div className="pstat"><span className="pstat-label">Active Patients</span><span className="pstat-val">{option.patients}{option.attritionHit > 0 ? ` (was ${option.statedPatients})` : ''}</span></div>
               <div className="pstat"><span className="pstat-label">Rating</span><span className="pstat-val">{option.reputation.toFixed(1)} ⭐</span></div>
               <div className="pstat"><span className="pstat-label">Staff</span><span className="pstat-val">{option.staff.length}</span></div>
               <div className="pstat"><span className="pstat-label">Monthly Rev</span><span className="pstat-val">${(option.monthlyRevenue / 1000).toFixed(0)}K</span></div>
