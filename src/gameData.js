@@ -388,6 +388,11 @@ export function calculateScore(gameState, stats) {
       peakPatients: gameState.peakPatients || gameState.patients,
       peakCash: gameState.peakCash || gameState.cash,
       turnoverRate: Math.round(turnoverRate * 100),
+      // Sqft utilization
+      totalSqft: gameState.sqft || 0,
+      usedSqft: (gameState.builtOutRooms || []).reduce((s, id) => { const bi = BUILDOUT_ITEMS.find(b => b.id === id); return s + (bi?.sqftNeeded || 0); }, 0),
+      wastedSqft: Math.max(0, (gameState.sqft || 0) - (gameState.builtOutRooms || []).reduce((s, id) => { const bi = BUILDOUT_ITEMS.find(b => b.id === id); return s + (bi?.sqftNeeded || 0); }, 0)),
+      sqftUtilizationPct: (gameState.sqft || 0) > 0 ? Math.round(((gameState.builtOutRooms || []).reduce((s, id) => { const bi = BUILDOUT_ITEMS.find(b => b.id === id); return s + (bi?.sqftNeeded || 0); }, 0) / (gameState.sqft || 1)) * 100) : 0,
     },
   };
   } catch (e) {
@@ -1746,6 +1751,68 @@ export const BUILDOUT_ITEMS = [
   { id: 'private_office', name: 'Private Office', costPerSqft: 275, sqftNeeded: 100, icon: '🏢', description: 'Doctor\'s private office. ~$27K', moraleBonus: 5 },
   { id: 'consultation', name: 'Consultation Room', costPerSqft: 300, sqftNeeded: 100, icon: '💬', description: 'Private room for treatment planning. ~$30K', satisfactionBonus: 8, revenueBonus: 100 },
 ];
+
+// ─── EQUIPMENT BREAKDOWN SCENARIOS ───
+// Adds variety to equipment failure popups
+export const EQUIPMENT_BREAKDOWNS = {
+  basic_chair: [
+    { title: 'Chair Hydraulics Failed', desc: 'The hydraulic pump on your dental chair blew a seal. Chair won\'t go up or down — patients are stuck at one height.' },
+    { title: 'Chair Upholstery Ripped', desc: 'A patient noticed the rip before you did. Not a great look. The padding underneath is exposed.' },
+    { title: 'Headrest Snapped Off', desc: 'The headrest adjustment mechanism broke clean off mid-appointment. Patient was... surprised.' },
+  ],
+  premium_chair: [
+    { title: 'Chair Motor Burned Out', desc: 'The electric positioning motor overheated and died. No more automatic adjustments — it\'s frozen in place.' },
+    { title: 'Patient Control Panel Dead', desc: 'The armrest control panel shorted out. Massage and heat functions are gone.' },
+    { title: 'Foot Pedal Malfunction', desc: 'The wireless foot control stopped responding. Had to manually adjust for every patient.' },
+  ],
+  elite_chair: [
+    { title: 'Integrated Monitor Died', desc: 'The built-in patient entertainment monitor went black. Your $75K chair just lost its "wow" factor.' },
+    { title: 'Heated Seat Overheating', desc: 'The heated seat element is malfunctioning — running too hot. Safety hazard. Had to shut it down.' },
+  ],
+  xray: [
+    { title: 'X-Ray Sensor Failed', desc: 'Digital sensor is giving blank images. Can\'t diagnose without visuals. Patients being sent home.' },
+    { title: 'X-Ray Generator Error', desc: 'E-44 error code on the x-ray unit. Tube may need replacing — that\'s the expensive part.' },
+  ],
+  panoramic_xray: [
+    { title: 'Pano Rotation Jammed', desc: 'The rotating arm on the panoramic unit locked up mid-scan. Patient had to hold still for nothing.' },
+    { title: 'Pano Image Distorted', desc: 'Images are coming out warped and unreadable. Could be the sensor array or the positioning laser.' },
+  ],
+  cbct: [
+    { title: 'CBCT Software Crash', desc: 'The 3D reconstruction software keeps crashing. The hardware might be fine but you can\'t process any scans.' },
+    { title: 'CBCT Calibration Off', desc: 'Images are showing artifacts. Needs professional recalibration — can\'t use it for implant planning like this.' },
+  ],
+  compressor: [
+    { title: 'Compressor Seized Up!', desc: 'The air compressor motor seized. No compressed air means NO handpieces work. Practice is DEAD until this is fixed.' },
+    { title: 'Compressor Oil Leak', desc: 'Oil is pooling under the compressor and air output is dropping. Handpieces are losing power mid-procedure.' },
+    { title: 'Air Dryer Failed', desc: 'The moisture separator failed — wet air is reaching instruments. Risk of patient contamination. Shut down immediately.' },
+  ],
+  vacuum_pump: [
+    { title: 'Vacuum Pump Failure!', desc: 'The suction system died. No suction = no procedures. Your assistants are trying to manage with manual suction but it\'s not sustainable.' },
+    { title: 'Vacuum Trap Overflowed', desc: 'Nobody cleaned the amalgam trap. Vacuum pressure dropped to nothing. Building smells terrible.' },
+    { title: 'Suction Line Clogged', desc: 'Major clog in the main suction line. Partial vacuum at best. Patients are gagging.' },
+  ],
+  sterilizer: [
+    { title: 'Autoclave Won\'t Reach Temp', desc: 'Sterilizer stuck at 200°F — needs 270°F minimum. Can\'t sterilize instruments. Using disposables is burning cash.' },
+    { title: 'Sterilizer Door Seal Cracked', desc: 'The gasket around the autoclave door cracked. Steam is escaping. Failed the spore test.' },
+  ],
+  laser: [
+    { title: 'Laser Fiber Snapped', desc: 'The fiber optic delivery tip broke. Replacement tips are backordered 2 weeks.' },
+    { title: 'Laser Power Inconsistent', desc: 'Output wattage is fluctuating wildly. Too dangerous to use on patients.' },
+  ],
+  cerec: [
+    { title: 'Milling Spindle Jammed', desc: 'The CEREC milling spindle seized up mid-crown. Block is stuck, spindle may be burned out. $140K machine is a paperweight.' },
+    { title: 'CEREC Camera Fogged', desc: 'The optical scanner\'s internal lens fogged up. Digital impressions are unusable.' },
+  ],
+  nitrous: [
+    { title: 'Nitrous Flowmeter Stuck', desc: 'The flowmeter valve is stuck — can\'t regulate the mix. Too risky to use until the manifold is serviced.' },
+  ],
+  intraoral_camera: [
+    { title: 'Camera Image Blurry', desc: 'Intraoral camera producing only blurry images. Probably the lens assembly. Patients can\'t see what you\'re showing them.' },
+  ],
+  intraoral_scanner: [
+    { title: 'Scanner Tip Overheating', desc: 'The scanner tip is getting too hot during use. Patients are complaining. Needs a new heating element.' },
+  ],
+};
 
 // ─── EQUIPMENT ───
 export const EQUIPMENT = [

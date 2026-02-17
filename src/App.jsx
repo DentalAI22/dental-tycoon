@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, Fragment, Component } from 'react'
 import {
-  EQUIPMENT, STAFF_TEMPLATES, ACQUISITION_OPTIONS, MARKETING_OPTIONS,
+  EQUIPMENT, EQUIPMENT_BREAKDOWNS, STAFF_TEMPLATES, ACQUISITION_OPTIONS, MARKETING_OPTIONS,
   INSURANCE_PLANS, OFFICE_UPGRADES, RANDOM_EVENTS, PROCEDURES,
   SPACE_OPTIONS, BUILDOUT_ITEMS, RELATIONSHIP_TYPES, PRESSURE_METRICS,
   BUILDOUT_COST_PER_SQFT, REVENUE_PER_SQFT_TARGET,
@@ -1670,6 +1670,7 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
   const baseBuildoutCost = space.baseBuildoutCost || Math.round(space.sqft * 125); // lease deposit, permits, plumbing, electrical, HVAC, IT infrastructure
   const [builtRooms, setBuiltRooms] = useState([]);
   const [cashSpent, setCashSpent] = useState(0);
+  const [architectHired, setArchitectHired] = useState(null); // null | 'premium' | 'budget'
 
   const usedSqft = builtRooms.reduce((sum, id) => {
     const item = BUILDOUT_ITEMS.find(b => b.id === id);
@@ -1721,6 +1722,66 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
     });
   };
 
+  const hireArchitect = (tier) => {
+    // Clear any existing rooms first
+    setBuiltRooms([]);
+    setCashSpent(0);
+    setArchitectHired(tier);
+
+    // Architect designs an optimized layout
+    const isPremium = tier === 'premium';
+    const surchargeRate = isPremium ? 0.15 : 0.08;
+    const sqft = space.sqft;
+    const targetOps = Math.min(space.maxOps, isPremium ? Math.floor(sqft / 400) : Math.floor(sqft / 480)); // premium = tighter, more efficient layout
+    const rooms = [];
+    let totalCost = 0;
+
+    // Build operatories — premium uses premium_ops, budget uses basic
+    const opsType = isPremium ? 'premium_ops' : 'basic_ops';
+    for (let i = 0; i < targetOps; i++) {
+      rooms.push(opsType);
+      const item = BUILDOUT_ITEMS.find(b => b.id === opsType);
+      totalCost += item.costPerSqft * item.sqftNeeded;
+    }
+
+    // Essential rooms
+    const essentials = isPremium
+      ? ['premium_waiting', 'sterilization', 'xray_room', 'break_room']
+      : ['waiting_area', 'sterilization', 'xray_room'];
+
+    essentials.forEach(id => {
+      const item = BUILDOUT_ITEMS.find(b => b.id === id);
+      if (item) {
+        const usedSoFar = rooms.reduce((s, r) => { const bi = BUILDOUT_ITEMS.find(b => b.id === r); return s + (bi?.sqftNeeded || 0); }, 0);
+        if (item.sqftNeeded <= sqft - usedSoFar) {
+          rooms.push(id);
+          totalCost += item.costPerSqft * item.sqftNeeded;
+        }
+      }
+    });
+
+    // Premium adds bonus rooms if space allows
+    if (isPremium) {
+      ['lab', 'private_office', 'consultation_room'].forEach(id => {
+        const item = BUILDOUT_ITEMS.find(b => b.id === id);
+        if (item) {
+          const usedSoFar = rooms.reduce((s, r) => { const bi = BUILDOUT_ITEMS.find(b => b.id === r); return s + (bi?.sqftNeeded || 0); }, 0);
+          if (item.sqftNeeded <= sqft - usedSoFar && !rooms.includes(id)) {
+            rooms.push(id);
+            totalCost += item.costPerSqft * item.sqftNeeded;
+          }
+        }
+      });
+    }
+
+    // Apply architect surcharge
+    const architectFee = Math.round(totalCost * surchargeRate);
+    totalCost += architectFee;
+
+    setBuiltRooms(rooms);
+    setCashSpent(totalCost);
+  };
+
   const coachTip = getCoachTip('buildout', {
     builtRooms, remainingBudget, initialBudget, space, opsCount,
   });
@@ -1743,6 +1804,46 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
           <span style={{ fontWeight: 'bold' }}>Remaining for Equipment, Staff & Reserves:</span><span style={{ color: remainingBudget < 50000 ? '#ef4444' : '#22c55e', fontWeight: 'bold' }}>${remainingBudget.toLocaleString()}</span>
         </div>
       </div>
+
+      {/* ═══ HIRE AN ARCHITECT ═══ */}
+      {!architectHired && builtRooms.length === 0 && (
+        <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '14px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px' }}>
+          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '6px', textAlign: 'center' }}>Hire an Architect?</div>
+          <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', marginBottom: '12px' }}>
+            An architect designs the most efficient layout for your space — maximizing operatories, patient flow, and usable sqft. Costs more upfront but teaches you: <b style={{ color: '#e2e8f0' }}>the #1 killer of profitability is wasted square footage.</b>
+          </p>
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button onClick={() => hireArchitect('premium')} style={{
+              flex: 1, padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
+              background: 'rgba(234,179,8,0.08)', border: '1px solid rgba(234,179,8,0.3)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>✨</div>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#eab308' }}>Premium Architect</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>15% surcharge. Maximum efficiency — tight layout, premium finishes, every sqft earning revenue. Best sqft/op ratio.</div>
+            </button>
+            <button onClick={() => hireArchitect('budget')} style={{
+              flex: 1, padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
+              background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.3)', color: '#e2e8f0',
+            }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>📐</div>
+              <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>Budget Architect</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>8% surcharge. Clean, functional layout. Looks nice, not bougie. Gets you operational without overspending.</div>
+            </button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
+            Or skip and build it yourself below (manual room selection)
+          </div>
+        </div>
+      )}
+      {architectHired && (
+        <div style={{ maxWidth: '600px', margin: '0 auto 12px', padding: '8px 14px', background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', fontSize: '12px', textAlign: 'center' }}>
+          <span style={{ color: '#22c55e', fontWeight: 'bold' }}>{architectHired === 'premium' ? '✨ Premium' : '📐 Budget'} Architect</span>
+          <span style={{ color: '#94a3b8' }}> designed your layout ({architectHired === 'premium' ? '15%' : '8%'} surcharge applied). </span>
+          <button onClick={() => { setArchitectHired(null); setBuiltRooms([]); setCashSpent(0); }} style={{ fontSize: '11px', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            Start over (DIY)
+          </button>
+        </div>
+      )}
 
       <CoachBanner tip={coachTip} />
 
@@ -1913,6 +2014,7 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
 
   const removeEquip = (index) => {
     const id = equipment[index];
+    if (essentialEquip.includes(id)) return; // can't remove compressor or vacuum
     const def = EQUIPMENT.find(e => e.id === id);
     if (def) setCash(c => c + def.cost);
     setEquipment(e => e.filter((_, i) => i !== index));
@@ -2069,7 +2171,10 @@ function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
                         <div className="shop-name">{def?.name}</div>
                         <div className="shop-detail">${def?.cost.toLocaleString()} · ${def?.maintenanceCost}/mo maint</div>
                       </div>
-                      <button className="fire-btn" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => removeEquip(i)}>Return</button>
+                      {essentialEquip.includes(id)
+                        ? <span style={{ fontSize: '10px', color: '#f59e0b', fontWeight: 700 }}>REQUIRED</span>
+                        : <button className="fire-btn" style={{ width: 'auto', padding: '4px 10px' }} onClick={() => removeEquip(i)}>Return</button>
+                      }
                     </div>
                   );
                 })}
@@ -5256,11 +5361,17 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           const replacePrice = hasGoodRel ? Math.round(replaceCost * 0.9) : replaceCost;
           const relNote = hasGreatRel ? 'Your equipment tech will fix it FREE (great relationship!)' : hasGoodRel ? '40% repair discount (good tech relationship)' : hasBadRel ? '30% markup — no relationship means price gouging' : 'Standard pricing';
 
+          // Pick a specific breakdown scenario for variety
+          const scenarios = EQUIPMENT_BREAKDOWNS[brokenId] || [];
+          const scenario = scenarios.length > 0 ? scenarios[Math.floor(rng() * scenarios.length)] : null;
+          const breakTitle = scenario ? scenario.title : `${def.name} ${isCritical ? 'FAILED' : 'Broke Down'}!`;
+          const breakDesc = scenario ? scenario.desc : `Your ${def.name.toLowerCase()} ${isCritical ? 'has critically failed — practice cannot operate until this is resolved!' : 'needs attention.'}`;
+
           // Show equipment repair popup instead of auto-resolving
           setPendingDecision({
             id: `equip_repair_${prev.day}_${brokenId}`,
-            title: `${def.name} ${isCritical ? 'FAILED' : 'Broke Down'}!`,
-            description: `Your ${def.name.toLowerCase()} ${isCritical ? 'has critically failed — practice cannot operate until this is resolved!' : 'needs attention.'}\n\nEquipment Tech Relationship: ${equipTechRel}/100 — ${relNote}`,
+            title: breakTitle,
+            description: `${breakDesc}\n\n📊 Repair Cost: $${repairCost.toLocaleString()} | Replacement: $${replaceCost.toLocaleString()} | Longevity: ${def.breakdownChance < 0.015 ? 'Excellent' : def.breakdownChance < 0.025 ? 'Good' : 'Fair'}\n\nEquipment Tech Relationship: ${equipTechRel}/100 — ${relNote}`,
             _gameState: prev,
             options: [
               ...(hasGreatRel ? [{
@@ -5289,7 +5400,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
             ],
           });
 
-          newLog.push({ day: prev.day, text: `⚠️ ${def.name} broke down!${isCritical ? ' CRITICAL — practice stopped!' : ''} Check the popup to decide what to do.`, type: 'negative' });
+          newLog.push({ day: prev.day, text: `⚠️ ${breakTitle}${isCritical ? ' CRITICAL — practice stopped!' : ''} Check the popup to decide what to do.`, type: 'negative' });
         }
       }
 
@@ -5610,6 +5721,17 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
 
   useEffect(() => {
     if (gameState.speed === 0) return;
+    if (gameState.speed === 5) {
+      // Weekly mode: advance 7 days rapidly then pause briefly
+      let running = true;
+      const weekTick = () => {
+        if (!running) return;
+        for (let i = 0; i < 7; i++) advanceDay();
+      };
+      const interval = setInterval(weekTick, 600);
+      weekTick(); // fire immediately
+      return () => { running = false; clearInterval(interval); };
+    }
     const speeds = { 1: 4000, 2: 2000, 3: 800, 4: 200 };
     const interval = setInterval(advanceDay, speeds[gameState.speed] || 4000);
     return () => clearInterval(interval);
@@ -6020,6 +6142,42 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
                   </div>
                 </div>
               )}
+
+              {/* ═══ SQFT UTILIZATION REPORT ═══ */}
+              {safeScore.metrics.totalSqft > 0 && (
+                <div style={{ marginTop: '12px', padding: '10px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '10px', color: '#60a5fa', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>Space Utilization</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', fontSize: '11px', marginBottom: '6px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#64748b' }}>Total</div>
+                      <div style={{ color: '#e2e8f0', fontWeight: 'bold' }}>{safeScore.metrics.totalSqft.toLocaleString()} sqft</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#64748b' }}>Used</div>
+                      <div style={{ color: '#22c55e', fontWeight: 'bold' }}>{safeScore.metrics.usedSqft.toLocaleString()} sqft</div>
+                    </div>
+                    <div style={{ textAlign: 'center' }}>
+                      <div style={{ color: '#64748b' }}>Wasted</div>
+                      <div style={{ color: safeScore.metrics.wastedSqft > 200 ? '#ef4444' : '#64748b', fontWeight: 'bold' }}>{safeScore.metrics.wastedSqft.toLocaleString()} sqft</div>
+                    </div>
+                  </div>
+                  <div style={{ height: '8px', background: 'rgba(30,41,59,0.8)', borderRadius: '4px', overflow: 'hidden', marginBottom: '6px' }}>
+                    <div style={{ height: '100%', width: `${safeScore.metrics.sqftUtilizationPct}%`, background: safeScore.metrics.sqftUtilizationPct >= 80 ? '#22c55e' : safeScore.metrics.sqftUtilizationPct >= 60 ? '#eab308' : '#ef4444', borderRadius: '4px' }} />
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#94a3b8', textAlign: 'center' }}>
+                    {safeScore.metrics.sqftUtilizationPct >= 85 ? '✅ Excellent utilization! Every sqft is earning revenue. An architect would be proud.' :
+                     safeScore.metrics.sqftUtilizationPct >= 70 ? '⚠️ Decent utilization, but you\'re paying rent on unused space. Consider building out remaining sqft.' :
+                     safeScore.metrics.sqftUtilizationPct >= 50 ? '🔴 Poor utilization — {wastedSqft} sqft sitting empty. That\'s ${Math.round(safeScore.metrics.wastedSqft * 3 / 12).toLocaleString()}/mo in wasted rent. Hire an architect next time.' :
+                     `🔴 Terrible utilization (${safeScore.metrics.sqftUtilizationPct}%). You're paying rent on ${safeScore.metrics.wastedSqft.toLocaleString()} sqft of dead space. This is the #1 profitability killer.`}
+                  </div>
+                  {safeScore.metrics.revenuePerSqft > 0 && (
+                    <div style={{ fontSize: '11px', color: '#64748b', textAlign: 'center', marginTop: '4px' }}>
+                      Revenue/sqft: <b style={{ color: safeScore.metrics.revenuePerSqft >= 150 ? '#22c55e' : safeScore.metrics.revenuePerSqft >= 100 ? '#eab308' : '#ef4444' }}>${safeScore.metrics.revenuePerSqft}/yr</b>
+                      <span style={{ color: '#475569' }}> (benchmark: $150-250/sqft)</span>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -6228,11 +6386,12 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         </div>
         <div className="speed-controls">
           {[
-            { speed: 0, label: '⏸' },
-            { speed: 1, label: '▶' },
-            { speed: 2, label: '▶▶' },
-            { speed: 3, label: '▶▶▶' },
-            { speed: 4, label: '⚡' },
+            { speed: 0, label: '⏸', title: 'Pause' },
+            { speed: 1, label: '▶', title: '1 day/4s' },
+            { speed: 2, label: '▶▶', title: '1 day/2s' },
+            { speed: 3, label: '▶▶▶', title: '1 day/0.8s' },
+            { speed: 4, label: '⚡', title: '1 day/0.2s' },
+            { speed: 5, label: '📅', title: 'Weekly (7 days/tick)' },
           ].map(s => (
             <button
               key={s.speed}
