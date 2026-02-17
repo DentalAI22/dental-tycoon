@@ -55,6 +55,59 @@ class GameErrorBoundary extends Component {
 }
 
 // ═══════════════════════════════════════════════════════
+// INVITE BUTTONS (shared across challenge/tournament screens)
+// ═══════════════════════════════════════════════════════
+function InviteButtons({ code, type, color }) {
+  const [copied, setCopied] = useState(false);
+  const msg = `Think you can run a dental practice better than me? Join my Dental Tycoon ${type}! Code: ${code} — play at dentaltycoon.com`;
+  const url = `https://www.dentaltycoon.com`;
+  const smsBody = encodeURIComponent(msg);
+  const emailSubject = encodeURIComponent(`Dental Tycoon ${type.charAt(0).toUpperCase() + type.slice(1)} Invite`);
+  const emailBody = encodeURIComponent(`${msg}\n\nGo to ${url} and enter code: ${code}`);
+
+  const canShare = typeof navigator !== 'undefined' && navigator.share;
+
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(msg);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.share({ title: `Dental Tycoon ${type}`, text: msg, url });
+    } catch { /* user cancelled */ }
+  };
+
+  const btnStyle = (bg) => ({
+    padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '12px',
+    border: `1px solid ${color}40`, background: bg, color, display: 'flex', alignItems: 'center', gap: '6px',
+  });
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', textAlign: 'center', marginBottom: '8px' }}>Invite Players</div>
+      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <button onClick={handleCopy} style={btnStyle(`${color}20`)}>
+          {copied ? '✓ Copied!' : '📋 Copy Link'}
+        </button>
+        <a href={`sms:?body=${smsBody}`} style={{ ...btnStyle(`${color}15`), textDecoration: 'none' }}>
+          💬 Text
+        </a>
+        <a href={`mailto:?subject=${emailSubject}&body=${emailBody}`} style={{ ...btnStyle(`${color}15`), textDecoration: 'none' }}>
+          📧 Email
+        </a>
+        {canShare && (
+          <button onClick={handleShare} style={btnStyle(`${color}20`)}>
+            📤 Share
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // TITLE SCREEN
 // ═══════════════════════════════════════════════════════
 function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroupChallenge, onTournament }) {
@@ -63,6 +116,8 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
   const [quickName, setQuickName] = useState(() => localStorage.getItem('dental_tycoon_player_name') || '');
   const [codeError, setCodeError] = useState('');
   const [copied, setCopied] = useState(null);
+  const [showDev, setShowDev] = useState(false);
+  const devTapRef = useRef({ count: 0, timer: null });
 
   const dailyBoard = getDailyLeaderboard();
   const allTimeBoard = getAllTimeLeaderboard();
@@ -86,7 +141,12 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
       <div className="title-content">
         <div className="tooth-icon">🦷</div>
         <h1 className="title">DENTAL TYCOON</h1>
-        <p className="subtitle">Build Your Practice. Grow Your Empire.</p>
+        <p className="subtitle" onClick={() => {
+          devTapRef.current.count++;
+          clearTimeout(devTapRef.current.timer);
+          devTapRef.current.timer = setTimeout(() => { devTapRef.current.count = 0; }, 1000);
+          if (devTapRef.current.count >= 5) { setShowDev(prev => !prev); devTapRef.current.count = 0; }
+        }}>Build Your Practice. Grow Your Empire.</p>
 
         {/* ═══ PROMINENT LEADERBOARD ═══ */}
         <div style={{ margin: '20px auto', maxWidth: '520px', background: 'rgba(15,23,42,0.8)', border: '1px solid rgba(148,163,184,0.15)', borderRadius: '14px', overflow: 'hidden' }}>
@@ -204,23 +264,25 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
           </div>
         </div>
 
-        {/* ═══ DEV SHORTCUTS ═══ */}
-        <div style={{ margin: '16px auto', maxWidth: '520px', padding: '10px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px' }}>
-          <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold', textAlign: 'center', marginBottom: '6px' }}>DEV TESTING</div>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[
-              { label: 'Sim Score', fn: () => { devSimulateFinishedGame(); window.location.reload(); } },
-              { label: 'Fake Group (8)', fn: () => { devCreateGroupWith8Players('TESTGP'); window.location.reload(); } },
-              { label: 'Fake Tourney (8)', fn: () => { devCreateTournamentWith8Players('TESTTM'); window.location.reload(); } },
-              { label: 'Clear Storage', fn: () => { localStorage.clear(); window.location.reload(); } },
-            ].map(btn => (
-              <button key={btn.label} onClick={btn.fn} style={{
-                fontSize: '10px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
-                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444',
-              }}>{btn.label}</button>
-            ))}
+        {/* ═══ DEV SHORTCUTS (hidden — 5-tap subtitle to reveal) ═══ */}
+        {showDev && (
+          <div style={{ margin: '16px auto', maxWidth: '520px', padding: '10px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '10px' }}>
+            <div style={{ fontSize: '10px', color: '#ef4444', fontWeight: 'bold', textAlign: 'center', marginBottom: '6px' }}>DEV TESTING</div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
+              {[
+                { label: 'Sim Score', fn: () => { devSimulateFinishedGame(); window.location.reload(); } },
+                { label: 'Fake Group (8)', fn: () => { devCreateGroupWith8Players('TESTGP'); window.location.reload(); } },
+                { label: 'Fake Tourney (8)', fn: () => { devCreateTournamentWith8Players('TESTTM'); window.location.reload(); } },
+                { label: 'Clear Storage', fn: () => { localStorage.clear(); window.location.reload(); } },
+              ].map(btn => (
+                <button key={btn.label} onClick={btn.fn} style={{
+                  fontSize: '10px', padding: '4px 10px', borderRadius: '6px', cursor: 'pointer',
+                  background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444',
+                }}>{btn.label}</button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Feedback link */}
         <div style={{ marginTop: '12px', textAlign: 'center' }}>
@@ -938,11 +1000,7 @@ function GroupChallengeSetupScreen({ onStartChallenge, onViewResults, onBack }) 
         <div style={{ textAlign: 'center', margin: '20px auto', maxWidth: '400px' }}>
           <div style={{ fontSize: '48px', fontFamily: 'monospace', fontWeight: 'bold', color: '#eab308', letterSpacing: '8px', marginBottom: '12px' }}>{createdCode}</div>
           <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '16px' }}>Share this code with your group. Everyone plays the same scenario.</p>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
-            <button onClick={() => { navigator.clipboard?.writeText(`Think you can run a practice better than me? Join my Dental Tycoon challenge! Code: ${createdCode} — play at dentaltycoon.com`); }} style={{ padding: '10px 20px', background: 'rgba(234,179,8,0.2)', border: '1px solid rgba(234,179,8,0.4)', borderRadius: '8px', color: '#eab308', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>
-              Copy Invite Message
-            </button>
-          </div>
+          <InviteButtons code={createdCode} type="group challenge" color="#eab308" />
           <button onClick={handleStartPlaying} style={{ padding: '14px 32px', background: 'linear-gradient(135deg, #22c55e, #16a34a)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '16px', cursor: 'pointer', width: '100%', marginBottom: '8px' }}>
             Start Playing
           </button>
@@ -1203,11 +1261,7 @@ function TournamentSetupScreen({ onViewBracket, onBack }) {
           <div style={{ fontSize: '48px', fontFamily: 'monospace', fontWeight: 'bold', color: '#ef4444', letterSpacing: '8px', marginBottom: '12px' }}>{createdCode}</div>
           <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '4px' }}>Share this code with players. Max {t?.maxPlayers || 8} players.</p>
           <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '16px' }}>{t?.players?.length || 1} player(s) joined</p>
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '16px' }}>
-            <button onClick={() => navigator.clipboard?.writeText(`Join my Dental Tycoon tournament! Code: ${createdCode} — play at dentaltycoon.com`)} style={{ padding: '10px 20px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
-              Copy Invite
-            </button>
-          </div>
+          <InviteButtons code={createdCode} type="tournament" color="#ef4444" />
           <button onClick={() => onViewBracket(createdCode)} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
             View Bracket / Start
           </button>
@@ -1837,8 +1891,11 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
 function SetupPhaseScreen({ buildoutData, difficulty, onComplete, onBack }) {
   const diff = difficulty || DIFFICULTY_MODES[1];
   const space = buildoutData?.space || SPACE_OPTIONS[1];
-  const [cash, setCash] = useState(buildoutData?.cashRemaining || diff.loanAmount);
-  const [equipment, setEquipment] = useState([]);
+  const [cash, setCash] = useState(() => (buildoutData?.cashRemaining || diff.loanAmount) - 9500); // minus compressor ($5K) + vacuum ($4.5K) auto-included
+  // Auto-include compressor + vacuum (can't run a practice without them)
+  const essentialEquip = ['compressor', 'vacuum_pump'];
+  const essentialCost = essentialEquip.reduce((sum, id) => { const e = EQUIPMENT.find(eq => eq.id === id); return sum + (e?.cost || 0); }, 0);
+  const [equipment, setEquipment] = useState(essentialEquip);
   const [staff, setStaff] = useState([]);
   const [marketing, setMarketing] = useState([]);
   const [insurance, setInsurance] = useState([]);
@@ -2265,7 +2322,21 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
                 })}
               </div>
             )}
-            <p className="practice-desc">{option.story}</p>
+            <p className="practice-desc" style={{ whiteSpace: 'pre-line' }}>{option.story}</p>
+            {/* Positive attributes */}
+            {option.positives && option.positives.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
+                {option.positives.map(pos => (
+                  <span key={pos.id} title={pos.desc} style={{
+                    fontSize: '10px', padding: '3px 8px', borderRadius: '12px',
+                    background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
+                    color: '#22c55e', fontWeight: 600, cursor: 'help',
+                  }}>
+                    {pos.icon} {pos.label}
+                  </span>
+                ))}
+              </div>
+            )}
             <div className="practice-stats">
               <div className="pstat"><span className="pstat-label">Price</span><span className="pstat-val">${(option.price / 1000).toFixed(0)}K</span></div>
               <div className="pstat"><span className="pstat-label">Patients</span><span className="pstat-val">{option.patients}{option.attritionHit > 0 ? ` (was ${option.statedPatients})` : ''}</span></div>
@@ -3530,6 +3601,61 @@ function ManagementPanel({ gameState, setGameState, stats, difficulty }) {
                 })}
               </>
             )}
+
+            {/* ═══ LEASE EXPANSION — negotiate for more sqft ═══ */}
+            {(() => {
+              const landlordRel = gameState.relationships?.landlord || 50;
+              const onTimePct = gameState.day > 30 ? Math.min(100, Math.round(((gameState.day - (gameState.missedPayments || 0) * 30) / gameState.day) * 100)) : 100;
+              const expansionCost = Math.round(25000 * (landlordRel > 70 ? 0.75 : landlordRel < 30 ? 1.4 : 1.0)); // TI allowance
+              const extraRent = Math.round((gameState.rent || 3000) * 0.35 * (landlordRel > 70 ? 0.85 : 1.0)); // ~35% rent increase
+              const extraSqft = 400; // enough for 1 operatory
+              const canExpand = gameState.cash >= expansionCost && gameState.day >= 30;
+              const bankWilling = onTimePct >= 80 && gameState.cash > 30000;
+
+              return (
+                <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px' }}>
+                  <h4 className="mgmt-subtitle" style={{ color: '#60a5fa' }}>Expand Your Space</h4>
+                  <p style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px' }}>
+                    Negotiate with your landlord for additional square footage. More space = more operatories = more revenue capacity.
+                  </p>
+                  <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '8px' }}>
+                    <div>Landlord Relationship: <span style={{ color: landlordRel > 60 ? '#22c55e' : landlordRel < 40 ? '#ef4444' : '#eab308', fontWeight: 'bold' }}>{landlordRel}/100</span>
+                      {landlordRel > 70 && ' — Great terms available!'}{landlordRel < 30 && ' — Expect bad terms.'}</div>
+                    <div>Bank standing: <span style={{ color: bankWilling ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>{bankWilling ? 'Good — willing to finance' : 'Improve cash position first'}</span></div>
+                  </div>
+                  <div className="shop-item" style={{ background: 'rgba(59,130,246,0.08)' }}>
+                    <span className="shop-icon">🏗️</span>
+                    <div className="shop-info">
+                      <div className="shop-name">Lease Expansion (+{extraSqft} sqft)</div>
+                      <div className="shop-detail">
+                        Build-out: ${expansionCost.toLocaleString()} | Rent +${extraRent.toLocaleString()}/mo
+                        {landlordRel > 70 ? ' (discount!)' : ''}
+                      </div>
+                    </div>
+                    <button
+                      className={`buy-btn ${!canExpand || !bankWilling ? 'disabled' : ''}`}
+                      onClick={() => {
+                        setGameState(prev => ({
+                          ...prev,
+                          cash: prev.cash - expansionCost,
+                          sqft: (prev.sqft || 0) + extraSqft,
+                          rent: (prev.rent || 0) + extraRent,
+                          maxOps: (prev.maxOps || 4) + 1,
+                          log: [...prev.log, {
+                            day: prev.day,
+                            text: `Negotiated lease expansion! +${extraSqft} sqft, rent now $${((prev.rent || 0) + extraRent).toLocaleString()}/mo. Time to build out that new operatory!`,
+                            type: 'positive',
+                          }],
+                        }));
+                      }}
+                      disabled={!canExpand || !bankWilling}
+                    >
+                      ${(expansionCost / 1000).toFixed(0)}K
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -4607,6 +4733,17 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         }
       }
 
+      // Remove equipment (broken, sold, etc.)
+      if (effects.removeEquipment) {
+        const idx = updated.equipment.indexOf(effects.removeEquipment);
+        if (idx !== -1) {
+          updated.equipment = [...updated.equipment];
+          updated.equipment.splice(idx, 1);
+          const eqDef = EQUIPMENT.find(e => e.id === effects.removeEquipment);
+          newLog.push({ day: updated.day, text: `Removed broken ${eqDef?.name || effects.removeEquipment} from practice.`, type: 'negative' });
+        }
+      }
+
       // Monthly overhead increase (e.g. lease)
       if (effects.monthlyOverhead) {
         updated.rent = (updated.rent || 0) + effects.monthlyOverhead;
@@ -5088,7 +5225,6 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         : rng() < 0.02 * diff.eventFrequency;
       if (diff.equipBreakdownEnabled && breakdownToday) {
         const equipTechRel = prev.relationships?.equipment_tech || 50;
-        const supplyRepRel = prev.relationships?.supply_rep || 50;
 
         // All breakable equipment — chairs, compressors, pumps, diagnostics, everything
         const breakableEquip = prev.equipment.filter(eq => {
@@ -5100,39 +5236,51 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
           const brokenId = schedule ? breakableEquip[0] : breakableEquip[Math.floor(rng() * breakableEquip.length)];
           const def = EQUIPMENT.find(e => e.id === brokenId);
           const repairCost = Math.round(def.cost * 0.15);
-          const isCritical = def.criticalEquipment; // compressor or vacuum pump
+          const isCritical = def.criticalEquipment;
+          const replaceCost = def.cost;
 
-          // Equipment rep relationship determines outcome
-          if (equipTechRel > 75 && rng() < 0.4) {
-            // Great relationship = sometimes free fix with fun narrative
-            const freeFixStories = [
-              `${def.name} started acting up, but luckily your equipment rep owed you one from that golf game last week — ran out and fixed it for FREE!`,
-              `${def.name} went down, but your equipment tech happened to be in the area and swung by — no charge. "You always take care of me," he said.`,
-              `${def.name} broke mid-morning, but one call to your equipment rep and he was here in 20 minutes. Free repair — perks of a good relationship.`,
-              `The ${def.name.toLowerCase()} made a terrible noise. Your equipment guy picked up on the first ring. "I'll be there in 15." No bill. That's what relationships are for.`,
-            ];
-            newLog.push({ day: prev.day, text: freeFixStories[prev.day % freeFixStories.length], type: 'positive' });
-            if (isCritical) patientDelta -= 1; // minor disruption even with quick fix
-          } else if (equipTechRel > 60) {
-            // Good relationship = discounted fix
-            const actualCost = Math.round(repairCost * 0.6);
-            newLog.push({ day: prev.day, text: `${def.name} needs repair! Cost: $${actualCost.toLocaleString()} (good tech relationship = 40% off).${isCritical ? ' PRACTICE STOPPED until fixed.' : ''}`, type: 'negative' });
-            cashDelta -= actualCost;
-            patientDelta -= isCritical ? (Math.floor(rng() * 3) + 3) : (Math.floor(rng() * 2) + 1);
-          } else {
-            // Bad/no relationship = full price, slow response, more patient loss
-            const penaltyMult = equipTechRel < 30 ? 1.3 : 1.0; // bad relationship = price gouging
-            const actualCost = Math.round(repairCost * penaltyMult);
-            const badRepStories = isCritical ? [
-              `${def.name} DIED. No relationship with an equipment tech means you're calling around begging for emergency service. $${actualCost.toLocaleString()} and half the day lost.`,
-              `The ${def.name.toLowerCase()} quit working. You don't have a tech on speed dial so you're Googling repair services at 8am. $${actualCost.toLocaleString()} emergency call.`,
-            ] : [
-              `${def.name} needs repair! Cost: $${actualCost.toLocaleString()}. No tech relationship means full price and slow service.`,
-            ];
-            newLog.push({ day: prev.day, text: badRepStories[prev.day % badRepStories.length], type: 'negative' });
-            cashDelta -= actualCost;
-            patientDelta -= isCritical ? (Math.floor(rng() * 4) + 4) : (Math.floor(rng() * 3) + 1);
-          }
+          // Calculate relationship-adjusted pricing
+          const hasGreatRel = equipTechRel > 75;
+          const hasGoodRel = equipTechRel > 60;
+          const hasBadRel = equipTechRel < 30;
+          const repairPrice = hasGreatRel ? 0 : hasGoodRel ? Math.round(repairCost * 0.6) : hasBadRel ? Math.round(repairCost * 1.3) : repairCost;
+          const replacePrice = hasGoodRel ? Math.round(replaceCost * 0.9) : replaceCost;
+          const relNote = hasGreatRel ? 'Your equipment tech will fix it FREE (great relationship!)' : hasGoodRel ? '40% repair discount (good tech relationship)' : hasBadRel ? '30% markup — no relationship means price gouging' : 'Standard pricing';
+
+          // Show equipment repair popup instead of auto-resolving
+          setPendingDecision({
+            id: `equip_repair_${prev.day}_${brokenId}`,
+            title: `${def.name} ${isCritical ? 'FAILED' : 'Broke Down'}!`,
+            description: `Your ${def.name.toLowerCase()} ${isCritical ? 'has critically failed — practice cannot operate until this is resolved!' : 'needs attention.'}\n\nEquipment Tech Relationship: ${equipTechRel}/100 — ${relNote}`,
+            _gameState: prev,
+            options: [
+              ...(hasGreatRel ? [{
+                id: 'free_fix', icon: '🤝', label: 'Call Your Tech (FREE)',
+                description: `Your equipment rep owes you one. He'll come out and fix the ${def.name.toLowerCase()} at no charge. Perks of a great relationship.`,
+                effects: { patientBoost: isCritical ? -1 : 0 },
+              }] : [{
+                id: 'repair', icon: '🔧', label: `Repair — $${repairPrice.toLocaleString()}`,
+                description: `Fix the existing ${def.name.toLowerCase()}. ${hasGoodRel ? 'Your tech gives you priority service and a discount.' : hasBadRel ? 'No tech relationship — you\'re calling around for emergency service. Slow and expensive.' : 'Standard repair call.'} ${isCritical ? 'Practice stopped until fixed.' : ''}`,
+                effects: { cashEffect: -repairPrice, patientBoost: isCritical ? (hasBadRel ? -5 : hasGoodRel ? -2 : -3) : (hasBadRel ? -2 : -1) },
+              }]),
+              {
+                id: 'replace', icon: '🆕', label: `Replace with New — $${replacePrice.toLocaleString()}`,
+                description: `Scrap the broken ${def.name.toLowerCase()} and buy a brand new one. More expensive upfront, but no more breakdowns on this unit for a while.${hasGoodRel ? ' Tech relationship gets you 10% off the new unit.' : ''}`,
+                effects: { cashEffect: -replacePrice, patientBoost: isCritical ? -2 : 0, reputationEffect: 0.1 },
+              },
+              ...(!isCritical ? [{
+                id: 'ignore', icon: '🚫', label: 'Ignore It (Do Nothing)',
+                description: `Leave the ${def.name.toLowerCase()} broken. You save money now, but lose the capacity/revenue it provided. Patients may notice.`,
+                effects: { removeEquipment: brokenId, patientBoost: -3, reputationEffect: -0.2 },
+              }] : [{
+                id: 'emergency', icon: '🚨', label: `Emergency Repair — $${Math.round(repairPrice * 1.5).toLocaleString()}`,
+                description: `CRITICAL: Practice cannot operate without this. Pay a premium for same-hour emergency service to minimize downtime.`,
+                effects: { cashEffect: -Math.round(repairPrice * 1.5), patientBoost: -1 },
+              }]),
+            ],
+          });
+
+          newLog.push({ day: prev.day, text: `⚠️ ${def.name} broke down!${isCritical ? ' CRITICAL — practice stopped!' : ''} Check the popup to decide what to do.`, type: 'negative' });
         }
       }
 

@@ -13,26 +13,26 @@ export const DIFFICULTY_MODES = [
   {
     id: 'beginner', name: 'Solo Startup', icon: '🟢',
     subtitle: 'Small Practice, Big Dreams',
-    description: 'A small solo practice startup. $500K loan, 1-2 operatories. Staff drama and equipment breakdowns turned OFF so you can focus on the fundamentals: get patients, treat them well, control costs.',
+    description: 'A forgiving solo practice startup. $600K loan, low rent, patients come easier, and costs are reduced. Staff drama, breakdowns, and audits are OFF so you can learn the fundamentals.',
     startModes: ['scratch'], // Solo Startup is ONLY for scratch — you can't "acquire" a startup
-    loanAmount: 500000,
+    loanAmount: 600000,       // more breathing room
     gameDuration: 90,         // 90-day season
-    rentMultiplier: 1.0,
-    salaryMultiplier: 1.0,
-    eventFrequency: 0.3,      // very few random events
-    patientGrowthBonus: 1.3,   // patients come a bit easier
-    maintenanceMultiplier: 1.0,
-    supplyMultiplier: 1.0,
-    startingReputation: 3.0,
-    overdraftLimit: -100000,
+    rentMultiplier: 0.75,     // 25% cheaper rent
+    salaryMultiplier: 0.85,   // 15% cheaper staff
+    eventFrequency: 0.2,      // even fewer random events
+    patientGrowthBonus: 1.6,  // patients come significantly easier
+    maintenanceMultiplier: 0.7, // 30% cheaper maintenance
+    supplyMultiplier: 0.8,    // 20% cheaper supplies
+    startingReputation: 3.5,  // start with better reputation
+    overdraftLimit: -150000,  // more runway before bankruptcy
     showHints: true,
-    interestRate: 0.06,
+    interestRate: 0.05,       // lower interest on loan
     staffDramaEnabled: false,
     equipBreakdownEnabled: false,
     insuranceAuditsEnabled: false,
     cashSpiralEnabled: false,
     competitorEventsEnabled: false,
-    features: ['90-day season', '$500K loan', 'Helpful tips', 'No staff drama', 'No breakdowns', 'Learn the basics'],
+    features: ['90-day season', '$600K loan', 'Low rent & salaries', 'Patients come easier', 'No drama/breakdowns', 'Learn the basics'],
   },
   {
     id: 'acquire_small', name: 'Small Practice Purchase', icon: '🟢',
@@ -2371,31 +2371,95 @@ function generateBuiltRooms(sqft, ops) {
   return rooms;
 }
 
+// Seller departure scenarios with farewell messages
+const SELLER_SCENARIOS = [
+  { reason: 'retired after 35 years of practice', farewell: "I built this practice patient by patient. Some of them have been with me since day one. Take care of them — they're good people. The hygiene recall list is solid; don't let it slip.", tone: 'warm' },
+  { reason: 'passed away suddenly from a heart attack', farewell: null, tone: 'tragic', note: "Dr. {name}'s family is selling. The practice ran well until the end — he was seeing patients the week he passed. Staff is shaken but the bones are good." },
+  { reason: 'left to pursue dental consulting', farewell: "I realized I love teaching more than treating. The practice is in good shape — I just lost the fire. Marketing is stuck in the '90s though. You'll need to modernize. Good luck, doc.", tone: 'honest' },
+  { reason: 'burned out after 20 years and walked away', farewell: "I'm done. I can't do another crown prep. The practice is yours — it was good once. Staff stuck around but they need someone who actually wants to be here.", tone: 'burnt' },
+  { reason: 'relocated to be closer to family', farewell: "This was a great practice — I hated to leave it. The patient base is loyal and the hygiene program is strong. My hygienist knows every patient by name. Keep her.", tone: 'warm' },
+  { reason: 'decided to specialize in orthodontics', farewell: "General dentistry is a grind. I'm going back for my ortho cert. The practice has a great location and solid insurance mix. Just needs someone who loves restorative.", tone: 'honest' },
+  { reason: 'was forced to sell due to health issues', farewell: "My hands aren't what they used to be. I kept treating too long — the last year was rough. Equipment needs attention and I let some systems slide. But the patients are wonderful.", tone: 'honest' },
+  { reason: 'retired early to travel', farewell: "Life's too short to drill teeth forever. The practice prints money if you run it right — the recall system is dialed in and the hygienist is a machine. Don't change the front desk girl, she's the heart of this place.", tone: 'warm' },
+];
+
+// Positive attributes that can appear alongside problems
+const PRACTICE_POSITIVES = [
+  { id: 'strong_recall', label: 'Strong Hygiene Recall', desc: 'Active recall system with 85%+ reappointment rate. Hygiene is the backbone of this practice.', icon: '📋' },
+  { id: 'loyal_patients', label: 'Loyal Patient Base', desc: 'Many patients have been here 10+ years. Low turnover — they came for the old doc but they stay for the staff.', icon: '❤️' },
+  { id: 'good_location', label: 'Prime Location', desc: 'High-visibility corner lot near schools and shopping. Great foot traffic and easy parking.', icon: '📍' },
+  { id: 'modern_systems', label: 'Digital Systems', desc: 'Paperless office with cloud-based PMS, digital charting, and automated appointment reminders.', icon: '💻' },
+  { id: 'steady_referrals', label: 'Specialist Referral Network', desc: 'Strong relationships with local specialists who send referrals back. A two-way street.', icon: '🤝' },
+  { id: 'community_rep', label: 'Community Reputation', desc: 'Known in the community. Sponsor of local little league, presence at health fairs. Word of mouth is strong.', icon: '🏘️' },
+  { id: 'hygienist_star', label: 'All-Star Hygienist', desc: 'The hygienist is exceptional — patients book their cleanings 6 months out. Losing her would hurt.', icon: '⭐' },
+  { id: 'low_debt', label: 'Clean Financials', desc: 'Books are clean, no outstanding debts or legal issues. What you see is what you get.', icon: '📊' },
+  { id: 'growth_potential', label: 'Untapped Growth', desc: 'Room for more operatories, no marketing has ever been done, insurance panel is basic. Huge upside if you invest.', icon: '📈' },
+  { id: 'new_roof', label: 'Recently Renovated', desc: 'Landlord just renovated the exterior and HVAC. You won\'t need to fight for building maintenance for years.', icon: '🏗️' },
+];
+
 function buildStory(name, problems, patients, reputation) {
   const ownerName = name.split(' ')[0];
-  const reasons = ['retired after 30 years', 'relocated out of state', 'passed away unexpectedly', 'pivoted to consulting', 'burned out and walked away'];
-  let story = `Dr. ${ownerName} ${pick(reasons)}. `;
-  if (patients > 200) story += `The practice had a solid patient base of ${patients} but `;
-  else story += `The practice was small with only ${patients} patients and `;
-  if (reputation < 2.5) story += 'reviews have tanked. ';
-  else if (reputation < 3.5) story += 'has been declining without leadership. ';
-  else story += 'was well-regarded in the community. ';
-  const problemDescs = {
-    low_morale: 'Staff is demoralized and skeptical of new ownership.',
-    bad_reputation: 'Online reviews are brutal — 2-star average. Rebuilding trust will take time and money.',
-    equipment_outdated: 'Equipment is ancient and poorly maintained. Budget for replacements or expect downtime.',
-    high_overhead: 'Way too much space for the operatories — you\'re paying rent on sqft you can\'t use. Overhead is bleeding cash from day one.',
-    dirty_office: 'The office is dingy and dated. Patients notice. A refresh is needed before you can grow.',
-    insurance_mess: 'Loaded with low-paying HMO and discount plans. High volume but terrible per-patient revenue.',
-    staff_drama: 'Staff was loyal to the old doc. One key person is threatening to leave and another is underperforming.',
-    patient_attrition: 'Many patients came for the old doctor personally. Expect significant patient loss during the ownership transition.',
-    no_marketing: 'Zero marketing or recall systems. The patient base has been passively shrinking for years.',
-    no_systems: 'No SOPs, no recall protocols, billing is disorganized. Collections are way below benchmark — money left on the table.',
-    bad_lease: 'Locked into an expensive long-term lease you can\'t renegotiate. Rent is well above market.',
-    embezzlement_aftermath: 'The previous office manager was embezzling. Financial records are unreliable and staff trust is destroyed.',
-  };
-  problems.forEach(p => { if (problemDescs[p]) story += problemDescs[p] + ' '; });
+  const scenario = pick(SELLER_SCENARIOS);
+  let story = '';
+
+  // Opening — how the doctor left
+  if (scenario.tone === 'tragic' && scenario.note) {
+    story += scenario.note.replace('{name}', ownerName) + ' ';
+  } else {
+    story += `Dr. ${ownerName} ${scenario.reason}. `;
+  }
+
+  // Practice context
+  if (patients > 200) story += `The practice had a solid patient base of ${patients} and `;
+  else if (patients > 100) story += `A mid-sized practice with ${patients} patients, `;
+  else story += `A smaller practice with ${patients} patients, `;
+
+  if (reputation >= 3.5) story += 'was well-regarded in the community. ';
+  else if (reputation >= 2.5) story += 'has been coasting without strong leadership. ';
+  else story += 'has seen better days — reviews tell the story. ';
+
+  // Seller farewell (if available)
+  if (scenario.farewell) {
+    story += `\n\nSeller's note: "${scenario.farewell}"`;
+  }
+
+  // Problems
+  if (problems.length > 0) {
+    const problemDescs = {
+      low_morale: 'Staff is demoralized and skeptical of new ownership.',
+      bad_reputation: 'Online reviews are brutal — 2-star average. Rebuilding trust will take time and money.',
+      equipment_outdated: 'Equipment is dated — the X-ray is from 2005 and the chairs have seen better days.',
+      high_overhead: 'Way too much space for the operatories — you\'re paying rent on sqft you can\'t use.',
+      dirty_office: 'The office needs a refresh — dated carpet, stained ceiling tiles. Patients notice.',
+      insurance_mess: 'Loaded with low-paying HMO plans. High volume but terrible per-patient revenue.',
+      staff_drama: 'Staff was loyal to the old doc. One key person may not stay through the transition.',
+      patient_attrition: 'Many patients came for the old doctor personally. Expect some to leave.',
+      no_marketing: 'Zero marketing — the practice ran on word-of-mouth and that was drying up.',
+      no_systems: 'No recall system, no SOPs. Billing is disorganized. Money left on the table.',
+      bad_lease: 'Locked into an expensive lease. Rent is above market and renegotiation is unlikely.',
+      embezzlement_aftermath: 'The previous office manager was embezzling. Books are unreliable.',
+    };
+    story += '\n\n⚠ Issues: ';
+    problems.forEach(p => { if (problemDescs[p]) story += problemDescs[p] + ' '; });
+  }
+
   return story.trim();
+}
+
+// Generate 1-3 positive attributes for a practice
+function generatePositives(problems, patients, reputation, staffCount) {
+  const pool = [...PRACTICE_POSITIVES];
+  // Filter out contradictory positives
+  if (problems.includes('no_systems')) pool.splice(pool.findIndex(p => p.id === 'modern_systems'), 1);
+  if (problems.includes('bad_reputation')) pool.splice(pool.findIndex(p => p.id === 'community_rep'), 1);
+  if (problems.includes('no_marketing')) pool.splice(pool.findIndex(p => p.id === 'community_rep'), 1);
+  if (problems.includes('embezzlement_aftermath')) pool.splice(pool.findIndex(p => p.id === 'low_debt'), 1);
+  if (patients < 80) pool.splice(pool.findIndex(p => p.id === 'loyal_patients'), 1);
+  if (staffCount < 2) pool.splice(pool.findIndex(p => p.id === 'hygienist_star'), 1);
+  // Clean up any -1 indices from missing items
+  const valid = pool.filter(Boolean);
+  const count = problems.length >= 3 ? 1 : problems.length >= 2 ? 2 : 3;
+  return shuffle(valid).slice(0, count);
 }
 
 export function generateAcquisitionOptions(difficulty) {
@@ -2431,10 +2495,12 @@ export function generateAcquisitionOptions(difficulty) {
     const actualOps = Math.max(2, Math.floor(sqft / sqftPerOp));
     const maxOps = Math.max(actualOps, Math.floor(sqft / 400)); // max potential if you optimize
 
+    const positives = generatePositives(problems, effectivePatients, reputation, staffCount);
     options.push({
       id: `gen_${Date.now()}_${i}`,
       name,
       story: buildStory(name, problems, effectivePatients, reputation),
+      positives,
       price,
       patients: effectivePatients, // post-attrition count (what you're actually getting)
       statedPatients: patients, // what the seller claimed
