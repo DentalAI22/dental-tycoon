@@ -2500,6 +2500,40 @@ function AcquireScreen({ difficulty, onSelect, onBack }) {
                 <span>$/Patient: <b style={{ color: '#e2e8f0' }}>${option.revenuePerPatient || 700}</b></span>
               </div>
             </div>
+            {/* Risk / Reward meter */}
+            {(() => {
+              // Calculate upside (positives, low price/collections, high patients) vs downside (problems, attrition, low cleanliness)
+              const problemWeight = (option.problems || []).length * 15;
+              const attritionWeight = (option.attritionHit || 0) * 0.5;
+              const cleanWeight = option.cleanliness < 40 ? 15 : option.cleanliness < 60 ? 5 : 0;
+              const pricePctWeight = option.collectionPct > 0.80 ? 15 : option.collectionPct > 0.75 ? 5 : 0;
+              const downside = Math.min(100, problemWeight + attritionWeight + cleanWeight + pricePctWeight);
+
+              const positiveWeight = (option.positives || []).length * 12;
+              const valuePctWeight = option.collectionPct < 0.74 ? 20 : option.collectionPct < 0.78 ? 10 : 0;
+              const repWeight = option.reputation > 3.5 ? 15 : option.reputation > 3.0 ? 8 : 0;
+              const patientWeight = option.patients > 500 ? 15 : option.patients > 300 ? 8 : 0;
+              const upside = Math.min(100, positiveWeight + valuePctWeight + repWeight + patientWeight + 10);
+
+              const total = upside + downside || 1;
+              const upsidePct = Math.round((upside / total) * 100);
+              const label = upsidePct > 65 ? 'Strong Value' : upsidePct > 50 ? 'Balanced' : upsidePct > 35 ? 'Risky' : 'High Risk';
+              const labelColor = upsidePct > 65 ? '#22c55e' : upsidePct > 50 ? '#eab308' : '#ef4444';
+
+              return (
+                <div style={{ margin: '8px 0', padding: '6px 10px', background: 'rgba(148,163,184,0.04)', borderRadius: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 600 }}>Downside Risk</span>
+                    <span style={{ fontSize: '11px', color: labelColor, fontWeight: 700 }}>{label}</span>
+                    <span style={{ fontSize: '10px', color: '#22c55e', fontWeight: 600 }}>Upside Potential</span>
+                  </div>
+                  <div style={{ height: '8px', borderRadius: '4px', background: 'rgba(148,163,184,0.1)', overflow: 'hidden', display: 'flex' }}>
+                    <div style={{ width: `${100 - upsidePct}%`, background: 'linear-gradient(90deg, #ef4444, #eab308)', borderRadius: '4px 0 0 4px', transition: 'width 0.3s' }} />
+                    <div style={{ width: `${upsidePct}%`, background: 'linear-gradient(90deg, #eab308, #22c55e)', borderRadius: '0 4px 4px 0', transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+              );
+            })()}
             <div className="practice-stats">
               <div className="pstat"><span className="pstat-label">Price</span><span className="pstat-val">${(option.price / 1000).toFixed(0)}K</span></div>
               <div className="pstat"><span className="pstat-label">Active Patients</span><span className="pstat-val">{option.patients}{option.attritionHit > 0 ? ` (was ${option.statedPatients})` : ''}</span></div>
