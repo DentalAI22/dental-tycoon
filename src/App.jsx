@@ -60,7 +60,7 @@ class GameErrorBoundary extends Component {
 function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroupChallenge, onTournament }) {
   const [lbTab, setLbTab] = useState('alltime'); // 'today' | 'alltime'
   const [quickCode, setQuickCode] = useState('');
-  const [quickName, setQuickName] = useState('');
+  const [quickName, setQuickName] = useState(() => localStorage.getItem('dental_tycoon_player_name') || '');
   const [codeError, setCodeError] = useState('');
   const [copied, setCopied] = useState(null);
 
@@ -142,7 +142,7 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
 
         {/* ═══ CHALLENGE CODE INPUT ═══ */}
         <div style={{ margin: '16px auto', maxWidth: '520px', display: 'flex', gap: '8px', alignItems: 'stretch' }}>
-          <input value={quickName} onChange={e => setQuickName(e.target.value)} placeholder="Your Name"
+          <input value={quickName} onChange={e => { setQuickName(e.target.value); localStorage.setItem('dental_tycoon_player_name', e.target.value); }} placeholder="Your Name"
             style={{ flex: '0 0 120px', padding: '10px 12px', fontSize: '13px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.2)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', outline: 'none' }} />
           <input value={quickCode} onChange={e => { setQuickCode(e.target.value.toUpperCase()); setCodeError(''); }} placeholder="Challenge Code"
             style={{ flex: 1, padding: '10px 12px', fontSize: '14px', fontFamily: 'monospace', letterSpacing: '2px', borderRadius: '10px', border: '1px solid rgba(234,179,8,0.3)', background: 'rgba(15,23,42,0.8)', color: '#eab308', outline: 'none', textAlign: 'center', textTransform: 'uppercase' }}
@@ -156,16 +156,24 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
         </div>
         {codeError && <div style={{ textAlign: 'center', fontSize: '12px', color: '#ef4444', marginTop: '-8px', marginBottom: '8px' }}>{codeError}</div>}
 
+        {/* ═══ PLAYER NAME ═══ */}
+        <div style={{ margin: '12px auto 4px', maxWidth: '520px' }}>
+          <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1.5px', textAlign: 'center', marginBottom: '6px' }}>Your Name (saved to leaderboard)</div>
+          <input value={quickName} onChange={e => { setQuickName(e.target.value); localStorage.setItem('dental_tycoon_player_name', e.target.value); }}
+            placeholder="Enter your name..."
+            style={{ width: '100%', padding: '10px 16px', fontSize: '15px', fontWeight: 600, borderRadius: '10px', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(15,23,42,0.8)', color: '#e2e8f0', outline: 'none', textAlign: 'center', boxSizing: 'border-box' }} />
+        </div>
+
         {/* ═══ PLAY BUTTONS ═══ */}
         <div className="start-options">
-          <button className="start-btn" onClick={() => onStart('scratch')}>
+          <button className="start-btn" onClick={() => onStart('scratch', quickName.trim())}>
             <span className="btn-icon">🏗️</span>
             <div>
               <div className="btn-title">Start from Scratch</div>
               <div className="btn-desc">Build your dream practice from nothing.</div>
             </div>
           </button>
-          <button className="start-btn" onClick={() => onStart('acquire')} style={{ borderColor: '#a78bfa' }}>
+          <button className="start-btn" onClick={() => onStart('acquire', quickName.trim())} style={{ borderColor: '#a78bfa' }}>
             <span className="btn-icon">🏢</span>
             <div>
               <div className="btn-title">Acquire a Practice</div>
@@ -4259,6 +4267,7 @@ function LeaderboardPanel({ gameState, stats, difficulty, setGameState }) {
             const s = calculateScore(gameState, stats);
             if (!s) return;
             saveToLeaderboard({
+              playerName: challengeData?.playerName || propPlayerName || localStorage.getItem('dental_tycoon_player_name') || '',
               overallScore: s.overall, overallGrade: s.overallGrade,
               profitMargin: s.metrics.profitMargin, overheadRatio: s.metrics.overheadRatio,
               monthlyRevenue: s.metrics.monthlyRevenue, day: gameState.day,
@@ -4338,7 +4347,7 @@ function KeyDecisionPopup({ decision, onChoose }) {
 // ═══════════════════════════════════════════════════════
 // GAME SCREEN (main)
 // ═══════════════════════════════════════════════════════
-function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData, difficulty, challengeData, onChallengeComplete }) {
+function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData, difficulty, challengeData, playerName: propPlayerName, onChallengeComplete }) {
   const diff = difficulty || DIFFICULTY_MODES[1]; // default to intermediate
 
   const [gameState, setGameState] = useState(() => {
@@ -5481,7 +5490,9 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
   useEffect(() => {
     if ((isGameOver || isSeasonComplete) && score && !savedEndRef.current) {
       savedEndRef.current = true;
+      const endPlayerName = challengeData?.playerName || propPlayerName || localStorage.getItem('dental_tycoon_player_name') || '';
       const resultData = {
+        playerName: endPlayerName,
         overallScore: score.overall,
         overallGrade: score.overallGrade,
         profitMargin: score.metrics.profitMargin,
@@ -5499,6 +5510,7 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
         outcome: isGameOver ? 'Bankrupt' : 'Completed',
         feedback: generateSeasonFeedback(gameState, stats, diff),
         decisions: gameState.decisionHistory || [],
+        challengeCode: challengeData?.code || null,
       };
       saveToLeaderboard(resultData);
       // Save to challenge if in challenge mode
@@ -6200,9 +6212,12 @@ export default function App() {
   const [challengeData, setChallengeData] = useState(null);
   const [challengeResult, setChallengeResult] = useState(null);
 
+  const [playerName, setPlayerName] = useState(() => localStorage.getItem('dental_tycoon_player_name') || '');
+
   // Title → choose path first, then difficulty
-  const handleStart = (mode) => {
+  const handleStart = (mode, name) => {
     setChallengeData(null);
+    if (name) { setPlayerName(name); localStorage.setItem('dental_tycoon_player_name', name); }
     setStartMode(mode);
     setScreen('difficulty');
   };
@@ -6289,7 +6304,7 @@ export default function App() {
   return (
     <GameErrorBoundary>
       <GameScreen startMode={startMode} acquisitionChoice={acquisitionChoice} fixWindowData={fixWindowData} buildoutData={buildoutData} difficulty={difficulty}
-        challengeData={challengeData} onChallengeComplete={(result) => { setChallengeResult(result); setScreen('challengeCompare'); }} />
+        challengeData={challengeData} playerName={playerName} onChallengeComplete={(result) => { setChallengeResult(result); setScreen('challengeCompare'); }} />
     </GameErrorBoundary>
   );
 }
