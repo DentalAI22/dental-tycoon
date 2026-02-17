@@ -22,7 +22,7 @@ import {
   getStaffingRecommendation, FEE_SCHEDULE_EXAMPLES,
   SPECIALIST_ROLES, isProvider,
   setGlobalRng, resetGlobalRng, createDayRng, getGlobalRng,
-  getDailyLeaderboard, getAllTimeLeaderboard,
+  getDailyLeaderboard, getAllTimeLeaderboard, updateYesterdayChampion,
   createGroupChallenge, getGroupChallenge, getAllGroupChallenges, getGroupChallengeStats,
   createTournament, joinTournament, generateBracket, submitTournamentResult, getTournament, getAllTournaments,
   devSimulateFinishedGame, devCreateGroupWith8Players, devCreateTournamentWith8Players,
@@ -164,7 +164,7 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
           </div>
           {activeBoard.length === 0 ? (
             <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
-              {lbTab === 'today' ? 'No scores today yet — be the first!' : 'No scores yet — play a game to claim #1!'}
+              Loading leaderboard...
             </div>
           ) : (
             <div style={{ maxHeight: '280px', overflowY: 'auto' }}>
@@ -178,11 +178,13 @@ function TitleScreen({ onStart, onChallenge, onLeaderboard, onQuickJoin, onGroup
                   <span style={{ fontWeight: 'bold', color: i === 0 ? '#eab308' : i === 1 ? '#94a3b8' : i === 2 ? '#cd7f32' : '#64748b', textAlign: 'center' }}>
                     {i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`}
                   </span>
-                  <span style={{ color: '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <span style={{ color: entry.isDummy ? '#64748b' : '#e2e8f0', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {entry.playerName || 'Anonymous'}
                     {entry.isTournamentChampion && <span style={{ marginLeft: '4px', fontSize: '10px' }}>🏆</span>}
+                    {entry.isYesterdayChamp && <span style={{ marginLeft: '4px', fontSize: '10px' }} title={`${entry.streak || 1} day streak!`}>🔥{entry.streak > 1 ? entry.streak : ''}</span>}
+                    {entry.isDummy && entry.taunt && <span style={{ marginLeft: '6px', fontSize: '10px', color: '#475569', fontStyle: 'italic', fontWeight: 400 }}>{entry.taunt}</span>}
                   </span>
-                  <span style={{ color: '#22c55e', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'right' }}>{entry.overallScore || 0}</span>
+                  <span style={{ color: entry.isDummy ? '#475569' : '#22c55e', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'right' }}>{entry.overallScore || 0}</span>
                   <span style={{ color: '#64748b', textAlign: 'center', fontSize: '11px' }}>{entry.overallGrade || '?'}</span>
                   <span style={{ color: '#475569', fontSize: '10px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.difficulty || 'Standard'}</span>
                   {entry.challengeCode ? (
@@ -6638,6 +6640,9 @@ export default function App() {
     window.history.replaceState({ screen: 'title' }, '');
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  // Update yesterday's champion on app load
+  useEffect(() => { updateYesterdayChampion(); }, []);
 
   const [startMode, setStartMode] = useState(null);   // 'scratch' | 'acquire'
   const [difficulty, setDifficulty] = useState(null);

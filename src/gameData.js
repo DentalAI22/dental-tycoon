@@ -1576,18 +1576,124 @@ export function clearLeaderboard() {
   localStorage.removeItem(LEADERBOARD_KEY);
 }
 
+// ─── DAILY DUMMY LEADERBOARD (5 placeholder entries per day) ───
+const DUMMY_NAMES = [
+  { name: 'Dr. TryAndBeatMe', taunt: 'I dare you.' },
+  { name: 'Dr. Waiting4U', taunt: 'This spot is warm.' },
+  { name: 'KnockMeOff', taunt: 'Bet you can\'t.' },
+  { name: 'Dr. Placeholder', taunt: 'I\'m not real. Replace me.' },
+  { name: 'YourNameHere', taunt: 'Seriously, play a game.' },
+  { name: 'Dr. EasyTarget', taunt: 'Low-hanging fruit.' },
+  { name: 'BenchWarmer', taunt: 'Keeping this seat warm.' },
+  { name: 'Dr. NPC', taunt: 'I literally can\'t lose... wait.' },
+  { name: 'FillMySpot', taunt: 'One game. That\'s all it takes.' },
+  { name: 'Dr. Tutorial', taunt: 'I scored this on my first try.' },
+  { name: 'ChallengeMe', taunt: 'Accept one and let\'s go.' },
+  { name: 'Dr. Rookie', taunt: 'My grandma scored higher.' },
+  { name: 'EmptyChair', taunt: 'Nobody sat here yet.' },
+  { name: 'Dr. MinEffort', taunt: 'I barely tried.' },
+  { name: 'PracticeBot', taunt: 'Beep boop. Beat my score.' },
+];
+
+function getDailyDummies() {
+  // Seed off the date so same dummies show all day
+  const today = new Date();
+  const dateSeed = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
+  let s = dateSeed;
+  const seededRandom = () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647; };
+
+  // Pick 5 unique dummies for today
+  const shuffled = [...DUMMY_NAMES].sort(() => seededRandom() - 0.5);
+  const picked = shuffled.slice(0, 5);
+
+  return picked.map((d, i) => ({
+    playerName: d.name,
+    taunt: d.taunt,
+    overallScore: Math.round(20 + seededRandom() * 40), // low scores: 20-60
+    overallGrade: ['D', 'D+', 'C-', 'C', 'C+'][Math.floor(seededRandom() * 5)],
+    difficulty: ['Solo Startup', 'Growing Practice', 'Solo Startup'][Math.floor(seededRandom() * 3)],
+    isDummy: true,
+    id: `dummy_${dateSeed}_${i}`,
+    timestamp: today.setHours(0, 0, 0, 0),
+  }));
+}
+
+// Yesterday's champion — carries forward with streak
+const YESTERDAY_CHAMP_KEY = 'dental_tycoon_yesterday_champ';
+
+function getYesterdayChampion() {
+  try {
+    const data = localStorage.getItem(YESTERDAY_CHAMP_KEY);
+    if (!data) return null;
+    return JSON.parse(data);
+  } catch { return null; }
+}
+
+export function updateYesterdayChampion() {
+  // Called at start of new day — promote today's #1 real score to "yesterday's champ"
+  const board = getLeaderboard();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  // Find yesterday's top real score
+  const yesterdayScores = board.filter(e => {
+    const ts = e.timestamp || 0;
+    return ts >= yesterdayStart.getTime() && ts < todayStart.getTime() && !e.isDummy;
+  }).sort((a, b) => b.overallScore - a.overallScore);
+
+  const existing = getYesterdayChampion();
+  if (yesterdayScores.length > 0) {
+    const champ = yesterdayScores[0];
+    const streak = (existing && existing.playerName === champ.playerName) ? (existing.streak || 1) + 1 : 1;
+    const champData = { ...champ, streak, isYesterdayChamp: true };
+    localStorage.setItem(YESTERDAY_CHAMP_KEY, JSON.stringify(champData));
+    return champData;
+  }
+  // No real scores yesterday — keep existing champ with incremented streak
+  if (existing) {
+    existing.streak = (existing.streak || 1) + 1;
+    localStorage.setItem(YESTERDAY_CHAMP_KEY, JSON.stringify(existing));
+    return existing;
+  }
+  return null;
+}
+
 export function getDailyLeaderboard() {
   const board = getLeaderboard();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  return board
+  const realToday = board
     .filter(e => (e.timestamp || 0) >= todayStart.getTime())
-    .sort((a, b) => b.overallScore - a.overallScore)
-    .slice(0, 10);
+    .sort((a, b) => b.overallScore - a.overallScore);
+
+  // Get yesterday's champion
+  const champ = getYesterdayChampion();
+
+  // Get daily dummies
+  const dummies = getDailyDummies();
+
+  // Merge: yesterday's champ (if exists and not beaten) + real scores + dummies
+  const merged = [];
+  if (champ && champ.overallScore) {
+    merged.push({ ...champ, isYesterdayChamp: true });
+  }
+  merged.push(...realToday);
+  merged.push(...dummies);
+
+  // Sort by score, real scores naturally push dummies down
+  merged.sort((a, b) => b.overallScore - a.overallScore);
+  return merged.slice(0, 10);
 }
 
 export function getAllTimeLeaderboard() {
-  return getLeaderboard().sort((a, b) => b.overallScore - a.overallScore).slice(0, 10);
+  const board = getLeaderboard();
+  if (board.length === 0) {
+    // Show dummies on all-time too if no real scores exist
+    return getDailyDummies().sort((a, b) => b.overallScore - a.overallScore);
+  }
+  return board.sort((a, b) => b.overallScore - a.overallScore).slice(0, 10);
 }
 
 export function getLeaderboardByMode(modeName) {
