@@ -1839,14 +1839,22 @@ export function submitTournamentResult(code, roundNum, matchupId, playerName, re
   if (matchup.player1?.name === playerName) matchup.result1 = result;
   if (matchup.player2?.name === playerName) matchup.result2 = result;
   if (matchup.result1 && matchup.result2) {
-    matchup.winner = (matchup.result1.overallScore || 0) >= (matchup.result2.overallScore || 0) ? matchup.player1.name : matchup.player2.name;
+    const s1 = matchup.result1.overallScore || 0;
+    const s2 = matchup.result2.overallScore || 0;
+    if (s1 === s2) {
+      // Coin flip tiebreaker
+      matchup.winner = Math.random() > 0.5 ? matchup.player1.name : matchup.player2.name;
+      matchup.tiedCoinFlip = true;
+    } else {
+      matchup.winner = s1 > s2 ? matchup.player1.name : matchup.player2.name;
+    }
     advanceWinnerInternal(t, roundNum, matchup);
     // Check if tournament complete
     const finalMatch = t.rounds[t.rounds.length - 1].matchups[0];
     if (finalMatch?.winner) {
       t.status = 'complete';
       t.champion = finalMatch.winner;
-      const champResult = finalMatch.result1?.overallScore >= finalMatch.result2?.overallScore ? finalMatch.result1 : finalMatch.result2;
+      const champResult = finalMatch.winner === finalMatch.player1?.name ? finalMatch.result1 : finalMatch.result2;
       if (champResult) saveToLeaderboard({ ...champResult, playerName: finalMatch.winner, isTournamentChampion: true, tournamentName: t.name, tournamentCode: t.code });
     }
   }

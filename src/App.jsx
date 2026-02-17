@@ -1240,7 +1240,7 @@ function GroupChallengeResultsScreen({ code, onBack, onPlayAgain }) {
         <button onClick={() => { const txt = `I placed #${results.findIndex(r => r.playerName === results[0]?.playerName) + 1} out of ${results.length} on Dental Tycoon! Code: ${code} — play at dentaltycoon.com`; navigator.clipboard?.writeText(txt); }} style={{ padding: '10px 20px', background: 'rgba(234,179,8,0.15)', border: '1px solid rgba(234,179,8,0.3)', borderRadius: '8px', color: '#eab308', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
           Share Results
         </button>
-        <button onClick={() => { const newCode = generateChallengeCode(); createGroupChallenge({ name: (group?.name || 'Rematch') + ' (Rematch)', code: newCode, creatorName: 'Player', difficulty: DIFFICULTY_MODES.find(d => d.id === (group?.difficultyId || 'intermediate')) || DIFFICULTY_MODES[1] }); onPlayAgain({ code: newCode, playerName: 'Player', difficulty: DIFFICULTY_MODES.find(d => d.id === (group?.difficultyId || 'intermediate')) || DIFFICULTY_MODES[1] }); }} style={{ padding: '10px 20px', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', color: '#60a5fa', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
+        <button onClick={() => { const savedName = localStorage.getItem('dental_tycoon_player_name') || 'Player'; const newCode = generateChallengeCode(); createGroupChallenge({ name: (group?.name || 'Rematch') + ' (Rematch)', code: newCode, creatorName: savedName, difficulty: DIFFICULTY_MODES.find(d => d.id === (group?.difficultyId || 'intermediate')) || DIFFICULTY_MODES[1] }); onPlayAgain({ code: newCode, playerName: savedName, difficulty: DIFFICULTY_MODES.find(d => d.id === (group?.difficultyId || 'intermediate')) || DIFFICULTY_MODES[1] }); }} style={{ padding: '10px 20px', background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', color: '#60a5fa', fontWeight: 'bold', fontSize: '12px', cursor: 'pointer' }}>
           Challenge Again (New Code)
         </button>
       </div>
@@ -1279,7 +1279,7 @@ function TournamentSetupScreen({ onViewBracket, onBack }) {
     if (!joinName.trim()) { setError('Enter your name'); return; }
     const t = joinTournament(code, joinName.trim());
     if (!t) { setError('Tournament not found or already started'); return; }
-    onViewBracket(code);
+    onViewBracket(code, joinName.trim());
   };
 
   if (createdCode) {
@@ -1293,7 +1293,7 @@ function TournamentSetupScreen({ onViewBracket, onBack }) {
           <p style={{ color: '#94a3b8', fontSize: '13px', marginBottom: '4px' }}>Share this code with players. Max {t?.maxPlayers || 8} players.</p>
           <p style={{ color: '#64748b', fontSize: '12px', marginBottom: '16px' }}>{t?.players?.length || 1} player(s) joined</p>
           <InviteButtons code={createdCode} type="tournament" color="#ef4444" />
-          <button onClick={() => onViewBracket(createdCode)} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
+          <button onClick={() => onViewBracket(createdCode, hostName.trim())} style={{ width: '100%', padding: '14px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 'bold', fontSize: '15px', cursor: 'pointer' }}>
             View Bracket / Start
           </button>
         </div>
@@ -1480,7 +1480,16 @@ function TournamentBracketScreen({ code, playerName, onPlayMatch, onBack }) {
                   <span>{m.player2?.name || 'TBD'}{m.player2?.isBye ? ' (BYE)' : ''}</span>
                   <span style={{ fontFamily: 'monospace' }}>{m.result2?.overallScore || ''}</span>
                 </div>
+                {m.tiedCoinFlip && <div style={{ fontSize: '9px', color: '#eab308', textAlign: 'center', marginTop: '1px' }}>Tie! Won by coin flip 🪙</div>}
                 {m.winner && <div style={{ fontSize: '9px', color: '#22c55e', textAlign: 'center', marginTop: '2px' }}>Winner: {m.winner}</div>}
+                {!m.winner && !m.player1?.isBye && !m.player2?.isBye && m.player1 && m.player2 && (m.player1.name === playerName || m.player2.name === playerName) && (
+                  <button onClick={() => onPlayMatch({ ...m, round: ri + 1 })} style={{
+                    width: '100%', marginTop: '4px', padding: '4px 8px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: '4px', color: '#ef4444', fontSize: '10px', fontWeight: 'bold', cursor: 'pointer',
+                  }}>
+                    Play Your Match
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -7060,7 +7069,20 @@ export default function App() {
   if (screen === 'title') return <TitleScreen onStart={handleStart} onChallenge={handleChallenge} onLeaderboard={() => setScreen('leaderboard')} onQuickJoin={handleQuickJoin} onGroupChallenge={handleGroupChallenge} onTournament={handleTournament} />;
   if (screen === 'leaderboard') return <LeaderboardScreen onBack={() => setScreen('title')} />;
   if (screen === 'challengeSetup') return <ChallengeSetupScreen onStartChallenge={handleStartChallenge} onJoinChallenge={handleJoinChallenge} onBack={() => setScreen('title')} />;
-  if (screen === 'challengeCompare') return <ChallengeCompareScreen challengeCode={challengeData?.code} myResult={challengeResult} onBack={() => { setChallengeData(null); setChallengeResult(null); setScreen('title'); }} />;
+  if (screen === 'challengeCompare') return <ChallengeCompareScreen challengeCode={challengeData?.code} myResult={challengeResult} onBack={() => {
+    // If we were in a tournament match, submit result and return to bracket
+    if (tournamentData?.activeMatchup) {
+      const matchup = tournamentData.activeMatchup;
+      if (challengeResult) {
+        submitTournamentResult(tournamentData.code, matchup.round, matchup.matchupId, tournamentData.playerName, challengeResult);
+      }
+      setTournamentData(prev => ({ ...prev, activeMatchup: null }));
+      setChallengeData(null); setChallengeResult(null);
+      setScreen('tournamentBracket');
+      return;
+    }
+    setChallengeData(null); setChallengeResult(null); setScreen('title');
+  }} />;
   if (screen === 'difficulty') return <DifficultySelectionScreen onSelect={handleDifficultySelect} onBack={() => setScreen('title')} startMode={startMode} />;
   if (screen === 'spaceSelection') return <SpaceSelectionScreen onSelect={handleSpaceSelect} onBack={() => setScreen('difficulty')} />;
   if (screen === 'buildout') return <BuildoutScreen space={selectedSpace} difficulty={difficulty} onComplete={handleBuildoutComplete} onBack={() => setScreen('spaceSelection')} />;
@@ -7069,8 +7091,13 @@ export default function App() {
   if (screen === 'fixWindow') return <FixWindowScreen practice={acquisitionChoice} difficulty={difficulty} onComplete={handleFixWindowComplete} onBack={() => setScreen('acquire')} />;
   if (screen === 'groupChallengeSetup') return <GroupChallengeSetupScreen onStartChallenge={(data) => { setChallengeData({ code: data.code, playerName: data.playerName }); setDifficulty(data.difficulty); setGroupChallengeData(data); setStartMode('scratch'); setScreen('spaceSelection'); }} onViewResults={(code) => { setGroupChallengeData({ code }); setScreen('groupChallengeResults'); }} onBack={() => setScreen('title')} />;
   if (screen === 'groupChallengeResults') return <GroupChallengeResultsScreen code={groupChallengeData?.code} onBack={() => setScreen('title')} onPlayAgain={(data) => { setChallengeData({ code: data.code, playerName: data.playerName }); setDifficulty(data.difficulty); setStartMode('scratch'); setScreen('spaceSelection'); }} />;
-  if (screen === 'tournamentSetup') return <TournamentSetupScreen onViewBracket={(code) => { setTournamentData({ code }); setScreen('tournamentBracket'); }} onBack={() => setScreen('title')} />;
-  if (screen === 'tournamentBracket') return <TournamentBracketScreen code={tournamentData?.code} playerName={tournamentData?.playerName} onPlayMatch={(matchup) => { setChallengeData({ code: matchup.seed.toString(), playerName: tournamentData?.playerName }); setDifficulty(DIFFICULTY_MODES.find(d => d.id === 'intermediate') || DIFFICULTY_MODES[1]); setStartMode('scratch'); setScreen('spaceSelection'); }} onBack={() => setScreen('title')} />;
+  if (screen === 'tournamentSetup') return <TournamentSetupScreen onViewBracket={(code, name) => { setTournamentData({ code, playerName: name || localStorage.getItem('dental_tycoon_player_name') || 'Player' }); setScreen('tournamentBracket'); }} onBack={() => setScreen('title')} />;
+  if (screen === 'tournamentBracket') return <TournamentBracketScreen code={tournamentData?.code} playerName={tournamentData?.playerName} onPlayMatch={(matchup) => {
+    setTournamentData(prev => ({ ...prev, activeMatchup: { round: matchup.round, matchupId: matchup.id, seed: matchup.seed } }));
+    setChallengeData({ code: matchup.seed.toString(), playerName: tournamentData?.playerName });
+    setDifficulty(DIFFICULTY_MODES.find(d => d.id === 'intermediate') || DIFFICULTY_MODES[1]);
+    setStartMode('scratch'); setScreen('spaceSelection');
+  }} onBack={() => setScreen('title')} />;
   return (
     <GameErrorBoundary>
       <GameScreen startMode={startMode} acquisitionChoice={acquisitionChoice} fixWindowData={fixWindowData} buildoutData={buildoutData} difficulty={difficulty}
