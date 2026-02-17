@@ -431,6 +431,8 @@ function DifficultySelectionScreen({ onSelect, onBack, startMode }) {
     { key: 'expertEventsEnabled', label: 'Expert Events', desc: 'Embezzlement, malpractice, state audits' },
   ];
 
+  const [showSponsor, setShowSponsor] = useState(false);
+
   return (
     <div className="acquire-screen">
       <h2 className="acquire-title">{isAcquire ? 'Choose Your Acquisition' : 'Choose Your Difficulty'}</h2>
@@ -438,6 +440,36 @@ function DifficultySelectionScreen({ onSelect, onBack, startMode }) {
         ? 'Bigger practice = bigger revenue potential, but also bigger loan, bigger overhead, and more that can go wrong. Small and simple is easier to manage. Big and complex is where the real money — and real risk — lives.'
         : 'Same loan, same market. Difficulty controls how many systems you have to manage — beginners get training wheels, experts get chaos.'
       }</p>
+
+      {/* Pre-approval coaching + real-life CTA */}
+      <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '10px 16px', background: 'rgba(34,197,94,0.04)', border: '1px solid rgba(34,197,94,0.12)', borderRadius: '8px', textAlign: 'center' }}>
+        <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+          💡 <span style={{ color: '#22c55e' }}>Smart move:</span> You've been pre-approved. Smart doctors get financing locked in before they go shopping — sellers pick pre-approved buyers first.
+        </div>
+        <button onClick={() => setShowSponsor(true)} style={{
+          marginTop: '6px', padding: '4px 14px', borderRadius: '6px', cursor: 'pointer', fontSize: '10px',
+          background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', color: '#60a5fa',
+        }}>
+          Serious about buying a real practice? Get pre-approved now →
+        </button>
+      </div>
+      {showSponsor && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowSponsor(false)}>
+          <div style={{ background: '#1e293b', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '16px', padding: '30px 40px', textAlign: 'center', maxWidth: '400px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏦</div>
+            <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#e2e8f0', marginBottom: '8px' }}>Coming Soon!</div>
+            <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
+              We're partnering with a dental practice lender to offer real pre-approvals right here. Stay tuned!
+            </div>
+            <div style={{ fontSize: '24px', marginBottom: '12px' }}>😊</div>
+            <button onClick={() => setShowSponsor(false)} style={{
+              padding: '8px 24px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 'bold',
+              background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa',
+            }}>Got It!</button>
+          </div>
+        </div>
+      )}
+
       <div className="practice-list">
         {DIFFICULTY_MODES.filter(mode => !mode.startModes || mode.startModes.includes(startMode)).map(mode => {
           const modeName = isAcquire ? (mode.acquireName || mode.name) : mode.name;
@@ -449,6 +481,11 @@ function DifficultySelectionScreen({ onSelect, onBack, startMode }) {
             <div key={mode.id} className="practice-card" onClick={() => onSelect(mode)}>
               <h3 className="practice-name">{mode.icon} {modeName}</h3>
               <p className="practice-desc" style={{ fontStyle: 'italic', color: '#94a3b8' }}>{modeSubtitle}</p>
+              <div style={{ margin: '8px 0', padding: '6px 12px', background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: '8px', display: 'inline-block' }}>
+                <span style={{ fontSize: '10px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pre-Approved: </span>
+                <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#22c55e' }}>${(mode.loanAmount / 1000).toFixed(0)}K</span>
+                <span style={{ fontSize: '11px', color: '#94a3b8' }}> @ {Math.round(mode.interestRate * 100)}% APR</span>
+              </div>
               <p className="practice-desc">{modeDesc}</p>
               <div className="practice-stats">
                 <div className="pstat"><span className="pstat-label">{isAcquire ? 'Purchase Price' : 'Loan'}</span><span className="pstat-val">${(mode.loanAmount / 1000).toFixed(0)}K @ {Math.round(mode.interestRate * 100)}%</span></div>
@@ -1517,29 +1554,33 @@ function getCoachTip(phase, state) {
     const hasWaiting = builtRooms.includes('waiting_area') || builtRooms.includes('premium_waiting');
     const hasSterilization = builtRooms.includes('sterilization');
 
+    const hasXrayTip = builtRooms.includes('xray_room');
     if (builtRooms.length === 0) {
-      return { icon: '👋', text: "Welcome! This is where you design your office. You MUST build a waiting area, sterilization room, and at least 1 operatory before moving on. Don't blow your whole budget here — you still need to buy equipment, hire staff, and start marketing.", priority: 'info' };
+      return { icon: '👋', text: "Welcome! Design your office. REQUIRED: waiting area (or premium), sterilization, x-ray suite, and at least 1 operatory. Don't blow your whole budget — you still need equipment, staff, and marketing.", priority: 'info' };
     }
     if (!hasWaiting) {
-      tips.push({ icon: '🪑', text: 'You need a waiting area! Patients need somewhere to sit before they\'re seen. This is required.', priority: 'critical' });
+      tips.push({ icon: '🪑', text: 'You need a waiting area! Premium Waiting Area also satisfies this requirement. Patients need somewhere to sit.', priority: 'critical' });
     }
     if (!hasSterilization) {
-      tips.push({ icon: '🧹', text: 'No sterilization room yet. You literally can\'t sterilize instruments without one — this is required.', priority: 'critical' });
+      tips.push({ icon: '🧹', text: 'No sterilization room yet. Can\'t sterilize instruments without one — required.', priority: 'critical' });
+    }
+    if (!hasXrayTip) {
+      tips.push({ icon: '📡', text: 'X-Ray Suite is REQUIRED. Without in-house imaging, you\'re referring every pano and CT out. Patients hate being sent elsewhere and it slows diagnosis.', priority: 'critical' });
     }
     if (opsCount === 0) {
-      tips.push({ icon: '🦷', text: 'Build at least 1 operatory! This is the room where you actually treat patients. No ops = no patients.', priority: 'critical' });
+      tips.push({ icon: '🦷', text: 'Build at least 1 operatory! This is where patients are treated. No ops = no patients.', priority: 'critical' });
     }
     if (budgetUsedPct > 0.6) {
-      tips.push({ icon: '💸', text: `You've spent ${Math.round(budgetUsedPct * 100)}% of your loan on buildout. That's aggressive. You still need dental chairs ($15-50K each), a dentist ($130-200K/yr salary), front desk staff, and marketing. Make sure you have enough left.`, priority: 'warning' });
+      tips.push({ icon: '💸', text: `You've spent ${Math.round(budgetUsedPct * 100)}% of your loan on buildout. You still need dental chairs ($15-50K each), a dentist ($130-200K/yr salary), front desk staff, and marketing.`, priority: 'warning' });
     }
-    if (opsCount >= 1 && hasWaiting && hasSterilization && budgetUsedPct < 0.35) {
-      tips.push({ icon: '✅', text: `Looking good! You've got the essentials built and plenty of budget left for equipment and staff. Each operatory needs a dental chair and a provider to use it. Don't build 4 ops if you can only afford 1 dentist.`, priority: 'good' });
+    if (opsCount >= 1 && hasWaiting && hasSterilization && hasXrayTip && budgetUsedPct < 0.35) {
+      tips.push({ icon: '✅', text: `Essentials are built with budget to spare. Each operatory needs a chair and a provider. Don't build 4 ops if you can only afford 1 dentist.`, priority: 'good' });
     }
     if (opsCount >= 3) {
-      tips.push({ icon: '⚠️', text: `${opsCount} operatories is ambitious. Each one needs a dental chair (~$25K+), a provider (dentist/hygienist), and a dental assistant. That's ~$200K+ per year per operatory in staffing. Make sure your budget supports it.`, priority: 'warning' });
+      tips.push({ icon: '⚠️', text: `${opsCount} operatories is ambitious. Each needs a dental chair (~$25K+), a provider, and an assistant. That's ~$200K+/yr per op in staffing.`, priority: 'warning' });
     }
     if (opsCount >= 1 && opsCount <= 2 && hasWaiting && hasSterilization) {
-      tips.push({ icon: '💡', text: `Pro tip: A real startup usually needs 2-3 operatories. One for the dentist, one for the hygienist, and maybe a spare. But every room you build costs money to equip and staff.`, priority: 'info' });
+      tips.push({ icon: '💡', text: `Pro tip: Startups usually need 2-3 ops. One for the dentist, one for hygienist, maybe a spare. Every room costs money to equip and staff.`, priority: 'info' });
     }
   }
 
@@ -1666,6 +1707,10 @@ function CoachBanner({ tip }) {
 }
 
 function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
+  const diff = difficulty || {};
+  const diffId = diff.id || 'intermediate';
+  const architectAvailable = diffId === 'beginner' || diffId === 'acquire_small' || diffId === 'intermediate';
+  const architectSurchargeMultiplier = diffId === 'intermediate' ? 1.5 : 1.0; // intermediate pays 50% more for architect
   const initialBudget = difficulty?.loanAmount || 750000;
   const baseBuildoutCost = space.baseBuildoutCost || Math.round(space.sqft * 125); // lease deposit, permits, plumbing, electrical, HVAC, IT infrastructure
   const [builtRooms, setBuiltRooms] = useState([]);
@@ -1709,8 +1754,9 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
 
   const hasWaiting = builtRooms.includes('waiting_area') || builtRooms.includes('premium_waiting');
   const hasSterilization = builtRooms.includes('sterilization');
+  const hasXray = builtRooms.includes('xray_room');
   const hasOps = opsCount >= 1;
-  const canProceed = hasWaiting && hasSterilization && hasOps;
+  const canProceed = hasWaiting && hasSterilization && hasXray && hasOps;
 
   const handleProceed = () => {
     if (!canProceed) return;
@@ -1730,7 +1776,7 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
 
     // Architect designs an optimized layout
     const isPremium = tier === 'premium';
-    const surchargeRate = isPremium ? 0.15 : 0.08;
+    const surchargeRate = (isPremium ? 0.15 : 0.08) * architectSurchargeMultiplier;
     const sqft = space.sqft;
     const targetOps = Math.min(space.maxOps, isPremium ? Math.floor(sqft / 400) : Math.floor(sqft / 480)); // premium = tighter, more efficient layout
     const rooms = [];
@@ -1806,7 +1852,7 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
       </div>
 
       {/* ═══ HIRE AN ARCHITECT ═══ */}
-      {!architectHired && builtRooms.length === 0 && (
+      {!architectHired && builtRooms.length === 0 && architectAvailable && (
         <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '14px', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '10px' }}>
           <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#60a5fa', marginBottom: '6px', textAlign: 'center' }}>Hire an Architect?</div>
           <p style={{ fontSize: '12px', color: '#94a3b8', textAlign: 'center', marginBottom: '12px' }}>
@@ -1819,7 +1865,7 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
             }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>✨</div>
               <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#eab308' }}>Premium Architect</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>15% surcharge. Maximum efficiency — tight layout, premium finishes, every sqft earning revenue. Best sqft/op ratio.</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{Math.round(15 * architectSurchargeMultiplier)}% surcharge. Maximum efficiency — tight layout, premium finishes, every sqft earning revenue.</div>
             </button>
             <button onClick={() => hireArchitect('budget')} style={{
               flex: 1, padding: '12px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
@@ -1827,12 +1873,17 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
             }}>
               <div style={{ fontSize: '20px', marginBottom: '4px' }}>📐</div>
               <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#22c55e' }}>Budget Architect</div>
-              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>8% surcharge. Clean, functional layout. Looks nice, not bougie. Gets you operational without overspending.</div>
+              <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>{Math.round(8 * architectSurchargeMultiplier)}% surcharge. Clean, functional layout. Gets you operational without overspending.</div>
             </button>
           </div>
           <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '11px', color: '#64748b' }}>
             Or skip and build it yourself below (manual room selection)
           </div>
+        </div>
+      )}
+      {!architectHired && builtRooms.length === 0 && !architectAvailable && (
+        <div style={{ maxWidth: '600px', margin: '0 auto 16px', padding: '10px 14px', background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: '8px', fontSize: '12px', color: '#94a3b8', textAlign: 'center' }}>
+          <b style={{ color: '#ef4444' }}>No Architect Available</b> — At this difficulty level, you design the layout yourself. Calculate your square footage needs, balance operatories vs. support rooms, and manage the budget manually. This is how the pros do it.
         </div>
       )}
       {architectHired && (
@@ -1883,8 +1934,9 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
           {/* Requirements */}
           <div className="buildout-requirements">
             <span className="buildout-req-title">Requirements:</span>
-            <span className={`buildout-req ${hasWaiting ? 'met' : ''}`}>Waiting Area {hasWaiting ? '✓' : '✗'}</span>
+            <span className={`buildout-req ${hasWaiting ? 'met' : ''}`}>Waiting {hasWaiting ? '✓' : '✗'}</span>
             <span className={`buildout-req ${hasSterilization ? 'met' : ''}`}>Sterilization {hasSterilization ? '✓' : '✗'}</span>
+            <span className={`buildout-req ${hasXray ? 'met' : ''}`}>X-Ray Suite {hasXray ? '✓' : '✗'}</span>
             <span className={`buildout-req ${hasOps ? 'met' : ''}`}>1+ Operatory {hasOps ? '✓' : '✗'}</span>
           </div>
         </div>
@@ -1914,6 +1966,8 @@ function BuildoutScreen({ space, difficulty, onComplete, onBack }) {
                       {item.revenueBonus ? ` | +$${item.revenueBonus} revenue` : ''}
                     </div>
                     <div className="shop-detail">{item.description}</div>
+                    {item.practiceModelNote && <div className="shop-detail" style={{ color: '#60a5fa', fontStyle: 'italic', marginTop: '2px' }}>{item.practiceModelNote}</div>}
+                    {item.countsAsWaiting && <div className="shop-detail" style={{ color: '#22c55e', marginTop: '2px' }}>Satisfies waiting area requirement</div>}
                   </div>
                   {alreadyBuilt ? (
                     <span className="owned-label">Built</span>
@@ -5648,6 +5702,37 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
       }
 
       const newRevHistory = [...prev.revenueHistory, s.dailyRevenue].slice(-90);
+
+      // ── BEGINNER COACHING TIPS ── (periodic guidance during gameplay)
+      if (diff.showHints) {
+        const day = prev.day;
+        const currentCash = prev.cash + cashDelta;
+        const currentPatients = prev.patients + patientDelta;
+        if (day === 7) {
+          newLog.push({ day, text: '💡 COACH: First week done! Check your daily revenue vs. daily costs. If costs > revenue, you\'re burning cash every single day. That\'s normal for Week 1, but it can\'t last forever.', type: 'info' });
+        }
+        if (day === 14 && currentPatients < 15) {
+          newLog.push({ day, text: '💡 COACH: Patient count is low. In the real world, it takes 6-12 months to build a full schedule. Marketing is the gas pedal — are you running enough? Check your marketing channels.', type: 'info' });
+        }
+        if (day === 21 && s.dailyProfit < 0) {
+          newLog.push({ day, text: '💡 COACH: You\'re losing money daily. Every new practice does at first — overhead is fixed but patients take time. Key metric: how many months of cash runway do you have? Divide cash by monthly burn.', type: 'warning' });
+        }
+        if (day === 30 && currentCash > 0) {
+          newLog.push({ day, text: '💡 COACH: One month in! Pro tip: Look at your Relationships tab. Your equipment tech, supply rep, and landlord relationships directly affect your costs. Invest in those relationships.', type: 'info' });
+        }
+        if (day === 45 && prev.staff.some(st => st.morale < 40)) {
+          newLog.push({ day, text: '💡 COACH: Staff morale is dropping. Unhappy staff = bad patient experience = bad reviews. Check the Training tab — team building boosts morale. In the real world, this is the #2 reason practices fail (after cash).', type: 'warning' });
+        }
+        if (day === 60) {
+          const overhead = s.totalDailyCosts * 30;
+          const revenue = s.dailyRevenue * 30;
+          const margin = revenue > 0 ? ((revenue - overhead) / revenue * 100).toFixed(0) : 0;
+          newLog.push({ day, text: `💡 COACH: Month 2 check-in. Monthly overhead: ~$${overhead.toLocaleString()}. Monthly revenue: ~$${revenue.toLocaleString()}. Margin: ${margin}%. A healthy practice targets 30-40% profit margin. Anything below 15% means you\'re working for free.`, type: 'info' });
+        }
+        if (day === 75 && (prev.activeMarketing || []).length < 2) {
+          newLog.push({ day, text: '💡 COACH: Only 1 marketing channel? Diversify. If Google Ads is your only source and costs spike, you have no backup. In the real world, the best practices have 3-4 patient acquisition channels.', type: 'info' });
+        }
+      }
 
       return {
         ...prev,
