@@ -6202,7 +6202,42 @@ function GameScreen({ startMode, acquisitionChoice, fixWindowData, buildoutData,
 // APP ROOT
 // ═══════════════════════════════════════════════════════
 export default function App() {
-  const [screen, setScreen] = useState('title');
+  const [screen, setScreenRaw] = useState('title');
+  const screenHistoryRef = useRef(['title']);
+
+  const setScreen = useCallback((newScreen) => {
+    setScreenRaw(prev => {
+      if (newScreen === prev) return prev;
+      if (newScreen === 'title') {
+        // Going home — reset history
+        screenHistoryRef.current = ['title'];
+        window.history.replaceState({ screen: 'title' }, '');
+      } else {
+        screenHistoryRef.current.push(newScreen);
+        window.history.pushState({ screen: newScreen }, '');
+      }
+      return newScreen;
+    });
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = (e) => {
+      const history = screenHistoryRef.current;
+      if (history.length > 1) {
+        history.pop();
+        const prevScreen = history[history.length - 1];
+        setScreenRaw(prevScreen);
+      } else {
+        // Already at title, push state back so we don't leave the app
+        window.history.pushState({ screen: 'title' }, '');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    // Set initial state
+    window.history.replaceState({ screen: 'title' }, '');
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   const [startMode, setStartMode] = useState(null);   // 'scratch' | 'acquire'
   const [difficulty, setDifficulty] = useState(null);
   const [acquisitionChoice, setAcquisitionChoice] = useState(null);

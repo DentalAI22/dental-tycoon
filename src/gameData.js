@@ -2412,6 +2412,10 @@ export function generateAcquisitionOptions(difficulty) {
     const reputation = randFloat(scaling.repRange[0], scaling.repRange[1]);
     const price = randInt(scaling.priceRange[0], scaling.priceRange[1]);
     const staffCount = randInt(scaling.staffRange[0], scaling.staffRange[1]);
+    // Patient attrition: reduce stated patient count by 25-35% (they'll leave during transition)
+    const attritionHit = problems.includes('patient_attrition') ? Math.round(patients * randFloat(0.25, 0.35)) : 0;
+    // Bad lease: inflate rent
+    const leaseInflation = problems.includes('bad_lease') ? 1.35 : 1.0;
     const baseRent = Math.round(sqft * randFloat(2.5, 4.0) / 12); // monthly rent
     const overheadMult = problems.includes('high_overhead') ? 1.3 : 1.0;
     const rent = Math.round(baseRent * overheadMult * leaseInflation);
@@ -2422,10 +2426,6 @@ export function generateAcquisitionOptions(difficulty) {
     const cleanliness = problems.includes('dirty_office') ? randInt(15, 30) : randInt(40, 75);
     const existingDebt = 0; // asset purchase — buyer doesn't inherit seller's corporate debt
     const embezzlementLoss = problems.includes('embezzlement_aftermath') ? randInt(20000, 50000) : 0;
-    // Patient attrition: reduce stated patient count by 25-35% (they'll leave during transition)
-    const attritionHit = problems.includes('patient_attrition') ? Math.round(patients * randFloat(0.25, 0.35)) : 0;
-    // Bad lease: inflate rent
-    const leaseInflation = problems.includes('bad_lease') ? 1.35 : 1.0;
     // Operatory count: realistic is ~400-500 sqft/op. High overhead = space trap (650+ sqft/op)
     const sqftPerOp = problems.includes('high_overhead') ? randInt(600, 800) : randInt(380, 520);
     const actualOps = Math.max(2, Math.floor(sqft / sqftPerOp));
